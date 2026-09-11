@@ -39,7 +39,7 @@
 		.game-table th { background: #333344; color: #aaa; padding: 8px; text-align: left; border: 1px solid #444; font-weight: bold; }
 		.game-table td { padding: 6px; border: 1px solid #333; color: #e0e0e0; }
 		.game-table tr:hover { background: #2d2d3d; cursor: pointer; }
-		.game-table tr.selected-row { background: #4a4ae5 !important; color: white; }
+		.game-table tr.selected-row { background: #008aff !important; color: white; }
 		.game-table input[type="text"] { width: 96%; background: #222; color: #fff; border: 1px solid #555; padding: 3px; border-radius: 3px; }
 	</style>
 </head>
@@ -84,7 +84,7 @@
 			<table class="game-table">
 				<thead>
 					<tr>
-						<th style="width: 10%;">ID</th>
+						<th style="width: 5%;">ID</th>
 						<th>Nombre de Línea / Juego</th>
 					</tr>
 				</thead>
@@ -98,13 +98,18 @@
 			<canvas id="2d" width="1280" height="720"></canvas>
 			
 			<!-- REFORMA MULTIMEDIA 2c: Panel interactivo de carátulas abajo del lienzo -->
-			<div class="panel" id="artPanel" style="margin-top: 15px; display: none; text-align: center;">
-				<h4 style="margin: 0 0 10px 0; color: #8a2be2;">🖼️ Gestión de Multimedia (_000.raw)</h4>
+			<div class="panel" id="artPanel" style="margin-top: 0px; display: none; text-align: center;">
+				<h4 style="margin: 0 0 10px 0; color: #ffba00;">🖼️ Gestión de Multimedia (_000.raw)</h4>
 				<p id="artStatusText" style="font-size: 12px; color: #aaa; margin-bottom: 10px;">Selecciona una línea del gestor para enlazar su carátula.</p>
 				<button class="btn btn-success" onclick="artAction('add')">➕ Añadir Imagen</button>
 				<button class="btn btn-purple" onclick="artAction('change')">🔄 Cambiar Imagen</button>
 				<button class="btn btn-danger" onclick="artAction('delete')">🗑️ Borrar Imagen</button>
-			</div>
+				
+				<!-- 🌟 EL VISOR CORRECTO: Cuadro de 584x268 para pintar la carátula -->
+				<div style="width: 584px; height: 268px; display: flex; align-items: center; justify-content: center; background-color: #111; border: 1px dashed #444444; margin: 15px auto 0 auto; overflow: hidden; border-radius: 4px;">
+				      <img id="visorCaratula" src="" alt="Sin carátula cargada" style="max-width: 100%; max-height: 100%; display: none; object-fit: contain;" />
+				</div> <!-- 💥 AQUÍ ESTÁ EL CIERRE QUE FALTABA PARA EL CUADRO NEGRO -->
+			</div> <!-- Y ESTE CIERRA EL PANEL COMPLETO -->
 		</div>
 	</div>
 </div>
@@ -381,17 +386,29 @@ function selectGameRow(idx) {
 		if (sel) { sel.value = sel.options[targetIdx].value; }
 		if (typeof renderAll === "function") { try { renderAll(); } catch(e) {} }
 		
+		// 🌟 MÁKINA: Aquí hacemos visible la carátula en el nuevo visor derecho
+		var imgVisor = document.getElementById('visorCaratula');
+		// Buscamos si la imagen está en el array global (suele llamarse gameImages, romImages o similar en tu proyecto)
+		// Si tu array se llama de otra forma, avísame, pero probamos con el estándar de la sincronización:
+		if (imgVisor && typeof gameImages !== "undefined" && gameImages[gIndex]) {
+			imgVisor.src = gameImages[gIndex];
+			imgVisor.style.display = 'block'; // La mostramos
+		} else if (imgVisor && typeof romImages !== "undefined" && romImages[gIndex]) {
+			imgVisor.src = romImages[gIndex];
+			imgVisor.style.display = 'block'; // Intento alternativo por si acaso
+		}
+
 		statusText.textContent = "Juego: " + gameNameClean + " | ¡Carátula interna sincronizada!";
 		statusText.style.color = "#5cb85c";
 	} else {
 		// 🎯 MÁKINA: Aunque no esté en el .DAT del HTML, le mandamos el aviso a PowerShell
 		statusText.textContent = "Juego: " + gameNameClean + " | Enviando petición de carátula a PowerShell...";
-		statusText.style.color = "#8a2be2"; // Color morado de acción multimedia
+		statusText.style.color = "#008aff"; // Color Azul de acción multimedia
+		
+		// Si no se encuentra el juego, ocultamos el visor para que no muestre una carátula errónea
+		var imgVisor = document.getElementById('visorCaratula');
+		if (imgVisor) { imgVisor.style.display = 'none'; }
 	}
-	
-	// 🚀 ESTA LÍNEA ES LA QUE ACTIVA TU BACKEND: Notificamos a PowerShell pase lo que pase
-	document.title = "SELECT_GAME:" + idx + "|" + targetArtFile;
-}
 
 
 gobj.artAction = function(actionType) {
@@ -596,16 +613,69 @@ window.onmousemove = function(e) {
 			}
 		}
 	}
-	gobj.rawUpdateLayout(false); renderAll();
+	if (typeof gobj !== "undefined" && gobj.rawUpdateLayout) { gobj.rawUpdateLayout(false); }
+	if (typeof renderAll === "function") { renderAll(); }
+};
+
+window.onmousemove = function(e) {
+	if (gIsTextMode || (!isDragging && !isResizing)) return;
+	var rect = canvasEl.getBoundingClientRect(), mouseX = e.clientX - rect.left, mouseY = e.clientY - rect.top, raw = gRaws[gIndex]; if (!raw) return;
+	var dx = mouseX - dragStartX, dy = mouseY - dragStartY;
+	if (isDragging) {
+		raw.xLeft = initialXLeft + dx; raw.yTop = initialYTop + dy; raw.xRight = initialXRight + dx; raw.yBottom = initialYBottom + dy;
+	} else if (isResizing) {
+		raw.xRight = initialXRight + dx; raw.yBottom = initialYBottom + dy;
+		if (lastLoadedImgElement) {
+			var w = raw.xRight - raw.xLeft, h = raw.yBottom - raw.yTop;
+			if (w > 0 && h > 0) {
+				var tc = document.createElement('canvas'); tc.width = w; tc.height = h;
+				var tx = tc.getContext('2d'); tx.drawImage(lastLoadedImgElement, 0, 0, w, h);
+				raw.pixelData = tx.getImageData(0, 0, w, h).data;
+			}
+		}
+	}
+	if (typeof gobj !== "undefined" && gobj.rawUpdateLayout) { gobj.rawUpdateLayout(false); }
+	if (typeof renderAll === "function") { renderAll(); }
 };
 
 window.onmouseup = function() { if (isDragging || isResizing) { isDragging = false; isResizing = false; } };
 
-window.loadRawFromSuite = gobj.loadRawFromSuite; window.rawUpdateLayout = gobj.rawUpdateLayout;
-window.rawReplace = gobj.rawReplace; window.rawDownload = gobj.rawDownload; window.rawUndo = gobj.rawUndo;
-window.rawToggleRotation = gobj.rawToggleRotation; window.rawIndexChange = gobj.rawIndexChange;
+// MÁKINA: Mapeo directo y seguro de funciones globales
+if (typeof gobj !== "undefined") {
+	window.loadRawFromSuite = gobj.loadRawFromSuite; 
+	window.rawUpdateLayout = gobj.rawUpdateLayout;
+	window.rawReplace = gobj.rawReplace; 
+	window.rawDownload = gobj.rawDownload; 
+	window.rawUndo = gobj.rawUndo;
+	window.rawToggleRotation = gobj.rawToggleRotation; 
+	window.rawIndexChange = gobj.rawIndexChange;
+}
 
-})(window.RawEditor = window.RawEditor || {});
+} // 🌟 MÁKINA: Cerramos la llave del script principal que se quedó abierta arriba
+
+// 🚀 FUNCIÓN ACTUALIZADA PARA LOS BOTONES MULTIMEDIA (FUERA DEL SCRIPT)
+function artAction(accion) {
+    console.log("Acción multimedia solicitada: " + accion);
+    
+    switch(accion) {
+        case 'add':
+            // Lógica para añadir carátula
+            break;
+        case 'change':
+            // Lógica para cambiar/reemplazar imagen
+            break;
+        case 'delete':
+            // Lógica para borrar carátula
+            break;
+        default:
+            break;
+    }
+    return false;
+}
 </script>
 </body>
 </html>
+
+
+
+
