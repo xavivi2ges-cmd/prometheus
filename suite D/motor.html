@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+	<title>Suite Prometheus - Motor Unificado</title>
+	<style type="text/css">
+		body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #1e1e24; color: #e0e0e0; margin: 0; padding: 10px; text-align: center; }
+		.container { max-width: 1284px; margin: 0 auto; display: block; }
+		.panel { background: #2a2a35; padding: 12px; border-radius: 8px; border: 1px solid #3a3a4a; margin-bottom: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); text-align: left; }
+		div { margin-bottom: 6px; }
+		.btn { background: #4a4ae5; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; margin-right: 5px; }
+		.btn:hover { background: #5a5af5; }
+		.btn-success { background: #5cb85c; }
+		.btn-success:hover { background: #4cae4c; }
+		.btn-warning { background: #f0ad4e; color: white; }
+		.btn-warning:hover { background: #ec971f; }
+		.btn-purple { background: #8a2be2; color: white; }
+		.btn-purple:hover { background: #9932cc; }
+		.btn-danger { background: #d9534f; color: white; }
+		.btn-danger:hover { background: #c9302c; }
+		
+		.editor-box { background: #333344; padding: 4px 10px; border-radius: 6px; display: inline-block; border: 1px solid #444455; vertical-align: middle; }
+		.editor-box label { font-size: 12px; font-weight: bold; margin-left: 6px; color: #aaa; }
+		.editor-box input { width: 55px; background: #222; color: #fff; border: 1px solid #555; text-align: center; border-radius: 3px; padding: 2px; }
+		canvas { border: 2px solid #444; background: #000; display: block; margin: 10px auto 0 auto; box-shadow: 0 6px 12px rgba(0,0,0,0.5); }
+		select { background: #333; color: #fff; padding: 4px; border-radius: 4px; border: 1px solid #555; font-weight: bold; }
+		
+		/* STYLE FIX 1c: MAQUEADO DE LA CAJA REEMPLAZAR (ESTILO DIMENSIONES) */
+		.file-upload-wrapper { display: inline-block; position: relative; overflow: hidden; vertical-align: middle; background: #333344; padding: 4px 10px; border-radius: 6px; border: 1px solid #444455; }
+		.file-upload-wrapper input[type="file"] { position: absolute; left: 0; top: 0; opacity: 0; cursor: pointer; height: 100%; width: 100%; }
+		
+		/* REFORMA GRIDS 2a y 2b: NUEVA REJILLA DE TRABAJO ANCHA Y LIMPIA */
+		.workspace-split { display: flex; gap: 15px; margin-top: 10px; text-align: left; }
+		.table-editor-zone { flex: 1.5; display: none; background: #2a2a35; padding: 12px; border-radius: 8px; border: 1px solid #3a3a4a; height: 835px; overflow-y: auto; }
+		.canvas-zone { flex: 1; min-width: 150px; text-align: center; }
+		
+		/* ESTILO TABLA INTERACTIVA HOVER/CLICK */
+		.game-table { width: 100%; border-collapse: collapse; background: #18181f; font-size: 13px; }
+		.game-table th { background: #333344; color: #aaa; padding: 8px; text-align: left; border: 1px solid #444; font-weight: bold; }
+		.game-table td { padding: 6px; border: 1px solid #333; color: #e0e0e0; }
+		.game-table tr:hover { background: #2d2d3d; cursor: pointer; }
+		.game-table tr.selected-row { background: #4a4ae5 !important; color: white; }
+		.game-table input[type="text"] { width: 96%; background: #222; color: #fff; border: 1px solid #555; padding: 3px; border-radius: 3px; }
+	</style>
+</head>
+<body>
+<div class="container">
+	<div class="panel" id="topControlPanel">
+		<form onsubmit="return false;">
+			<div>
+				<strong id="currentFileName">Archivo: Ninguno cargado</strong>
+				<button class="btn btn-success" onclick="rawDownload(); return false" style="margin-left:15px;">💾 Apply Changes</button>
+				<button class="btn btn-warning" id="btnUndo" onclick="rawUndo(); return false" disabled title="Deshacer">↩️ Deshacer</button>
+				<button class="btn btn-purple" id="btnRotate" onclick="rawToggleRotation(); return false;" title="Intercambiar Ancho por Alto">🔄 Rotar (W ⇄ H)</button>
+			</div>
+			<div style="border-top: 1px solid #3a3a4a; padding-top: 8px; margin-top: 8px;">
+				<span id="subIndexZone" style="display:none; margin-right:10px;">
+					<strong>Sub-Imagen:</strong>
+					<select id="sel" onchange="rawIndexChange(event.target)"></select>
+				</span>
+				<span id="modeBadge" style="font-weight:bold; padding:4px 10px; border-radius:4px; font-size:12px;"></span>
+				
+				<div class="editor-box" id="dimBox" style="margin-left:10px;">
+					<strong>Dimensiones:</strong>
+					<label>X:</label><input type="number" id="imgX" oninput="rawUpdateLayout(true)">
+					<label>Y:</label><input type="number" id="imgY" oninput="rawUpdateLayout(true)">
+					<label>W:</label><input type="number" id="imgW" oninput="rawUpdateLayout(true)">
+					<label>H:</label><input type="number" id="imgH" oninput="rawUpdateLayout(true)">
+				</div>
+				
+				<!-- FIX 1c: Reemplazar mimetizado con Dimensiones -->
+				<div class="file-upload-wrapper" id="replaceBox" style="margin-left:10px;">
+					<strong>📁 Reemplazar Imagen</strong>
+					<input type="file" id="imgReplacer" onchange="rawReplace(this)">
+				</div>
+			</div>
+		</form>
+	</div>
+	
+	<div class="workspace-split">
+		<!-- Cambiamos textarea por la estructura de Tabla tipo Grid limpia -->
+		<div class="table-editor-zone" id="textZone">
+			<div style="margin-bottom:8px; color: #5cb85c; font-weight: bold;">📋 Listado de Juegos / Archivos de Configuración (.TXT / .CFG):</div>
+			<table class="game-table">
+				<thead>
+					<tr>
+						<th style="width: 10%;">ID</th>
+						<th>Nombre de Línea / Juego</th>
+					</tr>
+				</thead>
+				<tbody id="gameTableBody">
+					<!-- Inyección dinámica con soporte hover y clic -->
+				</tbody>
+			</table>
+		</div>
+		
+		<div class="canvas-zone">
+			<canvas id="2d" width="1280" height="720"></canvas>
+			
+			<!-- REFORMA MULTIMEDIA 2c: Panel interactivo de carátulas abajo del lienzo -->
+			<div class="panel" id="artPanel" style="margin-top: 15px; display: none; text-align: center;">
+				<h4 style="margin: 0 0 10px 0; color: #8a2be2;">🖼️ Gestión de Multimedia (_000.raw)</h4>
+				<p id="artStatusText" style="font-size: 12px; color: #aaa; margin-bottom: 10px;">Selecciona una línea del gestor para enlazar su carátula.</p>
+				<button class="btn btn-success" onclick="artAction('add')">➕ Añadir Imagen</button>
+				<button class="btn btn-purple" onclick="artAction('change')">🔄 Cambiar Imagen</button>
+				<button class="btn btn-danger" onclick="artAction('delete')">🗑️ Borrar Imagen</button>
+			</div>
+		</div>
+	</div>
+</div>
+<script type="text/javascript">
+function byId(id) { return document.getElementById(id); }
+(function(gobj) {
+var g2D, gFileName = "", gDataView, gRaws = [], gIndex = 0;
+var gWidth = 1280, gHeight = 720;
+var isDragging = false, isResizing = false;
+var dragStartX, dragStartY;
+var initialXLeft, initialYTop, initialXRight, initialYBottom;
+var handleSize = 8;
+var lastLoadedImgElement = null;
+var historyStack = [];
+var gIsSingleMode = false;
+var gIsTextMode = false;
+
+// Array global para retener las líneas de juegos en memoria viva
+var gTextLines = [];
+var gSelectedRowIndex = -1;
+
+gobj.saveHistoryState = function() {
+	if (gIsTextMode || !gDataView) return;
+	var currentBufferCopy = new Uint8Array(gDataView.buffer.slice(0));
+	var rawsCopy = JSON.parse(JSON.stringify(gRaws));
+	historyStack.push({ buffer: currentBufferCopy, raws: rawsCopy, index: gIndex });
+	if (historyStack.length > 30) historyStack.shift();
+	byId('btnUndo').disabled = false;
+};
+
+gobj.rawUndo = function() {
+	if (gIsTextMode || historyStack.length === 0) return;
+	var previousState = historyStack.pop();
+	gDataView = new DataView(previousState.buffer.buffer);
+	gRaws = previousState.raws; gIndex = previousState.index;
+	if (historyStack.length === 0) byId('btnUndo').disabled = true;
+	rebuildSelectOptions(); updateInputsFromLayout(); renderAll();
+};
+
+gobj.rawToggleRotation = function() {
+	if (gRaws.length === 0 || gIsTextMode) return;
+	gobj.saveHistoryState();
+	var raw = gRaws[gIndex];
+	var currentW = raw.xRight - raw.xLeft;
+	var currentH = raw.yBottom - raw.yTop;
+	raw.xRight = raw.xLeft + currentH;
+	raw.yBottom = raw.yTop + currentW;
+	updateInputsFromLayout(); renderAll();
+};
+
+function rebuildSelectOptions() {
+	var sel = byId('sel'); sel.innerHTML = '';
+	for (var i = 0; i < gRaws.length; i++) {
+		var opt = document.createElement('option'); opt.value = i;
+		opt.textContent = "Idx " + i + " (" + (gRaws[i].xRight - gRaws[i].xLeft) + "x" + (gRaws[i].yBottom - gRaws[i].yTop) + ")";
+		if (i === gIndex) opt.selected = true;
+		sel.appendChild(opt);
+	}
+}
+
+gobj.rawIndexChange = function(target) {
+	gIndex = parseInt(target.value);
+	updateInputsFromLayout();
+	renderAll();
+};
+
+gobj.loadRawFromSuite = function(fileName, base64Data) {
+	gFileName = fileName;
+	byId('currentFileName').textContent = "Archivo: " + fileName;
+	g2D = byId('2d').getContext('2d');
+	
+	var lowerName = fileName.toLowerCase();
+	
+	// SOPORTE INTEGRAL NUEVO PARA TU SORPRESA DEL DIA (.CFG)
+	if (lowerName.indexOf('.txt') !== -1 || lowerName.indexOf('.cfg') !== -1) {
+		gIsTextMode = true;
+		gRaws = []; historyStack = []; byId('btnUndo').disabled = true;
+		
+		byId('textZone').style.display = 'block';
+		byId('artPanel').style.display = 'block'; // Activamos panel de caratulas
+		byId('2d').style.display = 'none';
+		byId('subIndexZone').style.display = 'none';
+		byId('dimBox').style.display = 'none';
+		byId('replaceBox').style.display = 'none';
+		byId('btnRotate').style.display = 'none';
+		
+		var binaryString = window.atob(base64Data);
+		var badge = byId('modeBadge'); 
+		badge.textContent = "📝 LISTADO CONFIGURACION (.CFG / .TXT)";
+		badge.style.background = "#d9534f"; badge.style.color = "white";
+		
+		// Invocamos el renderizador en rejilla con el string decodificado
+		renderGameTableGrid(binaryString);
+		return;
+	}
+	gIsTextMode = false;
+	byId('textZone').style.display = 'none';
+	byId('artPanel').style.display = 'none';
+	byId('2d').style.display = 'block';
+	byId('dimBox').style.display = 'inline-block';
+	byId('replaceBox').style.display = 'inline-block';
+	byId('btnRotate').style.display = 'inline-block';
+	
+	var binaryString = window.atob(base64Data);
+	var len = binaryString.length;
+	var bytes = new Uint8Array(len);
+	for (var i = 0; i < len; i++) { bytes[i] = binaryString.charCodeAt(i); }
+	
+	gDataView = new DataView(bytes.buffer);
+	gRaws = []; historyStack = []; byId('btnUndo').disabled = true;
+	
+	var ofs = 0, hasMultiHeader = false;
+	if (gDataView.byteLength >= 16) {
+		if (gWidth === gDataView.getUint16(4, true) && gHeight === gDataView.getUint16(6, true)) {
+			hasMultiHeader = true;
+		}
+	}
+
+	if (hasMultiHeader) {
+		gIsSingleMode = false;
+		byId('subIndexZone').style.display = 'inline-block';
+		while (ofs + 16 <= gDataView.byteLength && gWidth === gDataView.getUint16(ofs + 4, true) && gHeight === gDataView.getUint16(ofs + 6, true)) {
+			gRaws.push({
+				headerOffset: ofs, byteOffset: gDataView.getUint32(ofs, true),
+				xLeft: gDataView.getUint16(ofs + 8, true), yTop: gDataView.getUint16(ofs + 10, true),
+				xRight: gDataView.getUint16(ofs + 12, true), yBottom: gDataView.getUint16(ofs + 14, true),
+				pixelData: null
+			});
+			ofs += 16;
+		}
+		var badge = byId('modeBadge'); badge.textContent = "📦 MODO CONTENEDOR (MULTI)";
+		badge.style.background = "#4a4ae5"; badge.style.color = "white";
+	} else {
+		gIsSingleMode = true;
+		byId('subIndexZone').style.display = 'none';
+		
+		var totalPixels = gDataView.byteLength / 2;
+		var cw = gWidth, ch = gHeight;
+		
+		if (totalPixels === 1280 * 720) { cw = 1280; ch = 720; }
+		else if (totalPixels === 800 * 480) { cw = 800; ch = 480; }
+		else if (totalPixels === 640 * 480) { cw = 640; ch = 480; }
+		else if (totalPixels === 568 * 284) { cw = 568; ch = 284; }
+		else if (totalPixels === 1280 * 270) { cw = 1280; ch = 270; }
+		else if (totalPixels === 176 * 456) { cw = 176; ch = 456; }
+		else if (totalPixels === 176 * 252) { cw = 176; ch = 252; }
+		else if (totalPixels === 376 * 213) { cw = 376; ch = 213; }
+		else if (totalPixels === 44 * 35) { cw = 44; ch = 35; }
+		else if (totalPixels === 28 * 37) { cw = 28; ch = 37; }
+		else if (totalPixels === 28 * 28) { cw = 28; ch = 28; }
+		else if (totalPixels === 20 * 20) { cw = 20; ch = 20; }
+		else {
+			var side = Math.sqrt(totalPixels);
+			if (side % 1 === 0) { cw = side; ch = side; }
+			else { cw = Math.round(Math.sqrt(totalPixels * (16/9)) / 4) * 4; ch = Math.round(totalPixels / cw); }
+		}
+
+		gRaws.push({ headerOffset: -1, byteOffset: 0, xLeft: 0, yTop: 0, xRight: cw, yBottom: ch, pixelData: null });
+		var badge = byId('modeBadge'); badge.textContent = "🖼️ MODO IMAGEN ÚNICA (" + cw + "x" + ch + ")";
+		badge.style.background = "#5cb85c"; badge.style.color = "white";
+	}
+	gIndex = 0; rebuildSelectOptions(); updateInputsFromLayout(); renderAll();
+};
+
+function renderGameTableGrid(fullTextContent) {
+	gTextLines = fullTextContent.split(/\r?\n/);
+	var tbody = byId("gameTableBody");
+	tbody.innerHTML = "";
+	
+	gTextLines.forEach(function(line, idx) {
+		if(idx === gTextLines.length - 1 && line.trim() === "") return;
+		
+		var tr = document.createElement("tr");
+		tr.id = "gamerow_" + idx;
+		tr.onclick = function() { selectGameRow(idx); };
+		
+		var tdId = document.createElement("td");
+		tdId.textContent = (idx + 1);
+		tdId.style.fontWeight = "bold";
+		tdId.style.color = "#8a2be2";
+		
+		var tdName = document.createElement("td");
+		var input = document.createElement("input");
+		input.type = "text";
+		input.value = line;
+		input.oninput = function(e) {
+			gTextLines[idx] = e.target.value;
+			byId('btnUndo').disabled = false;
+		};
+		
+		tdName.appendChild(input);
+		tr.appendChild(tdId);
+		tr.appendChild(tdName);
+		tbody.appendChild(tr);
+	});
+	gSelectedRowIndex = -1;
+}
+
+function selectGameRow(idx) {
+	gSelectedRowIndex = idx;
+	var rows = document.querySelectorAll(".game-table tr");
+	rows.forEach(function(r) { r.classList.remove("selected-row"); });
+	
+	var selectedRow = byId("gamerow_" + idx);
+	if (selectedRow) { selectedRow.classList.add("selected-row"); }
+	
+	var gameName = gTextLines[idx] || "";
+	var statusText = byId("artStatusText");
+	statusText.textContent = "Juego: " + gameName + " | Buscando carátula asociada...";
+	statusText.style.color = "#5cb85c";
+	
+	document.title = "SELECT_GAME:" + idx + "|" + gameName;
+}
+
+gobj.artAction = function(actionType) {
+	if (gSelectedRowIndex === -1) {
+		alert("Mákina, primero debes seleccionar una fila haciendo clic en la lista.");
+		return;
+	}
+	var gameName = gTextLines[gSelectedRowIndex] || "";
+	
+	if (actionType === 'delete') {
+		if (confirm("¿Borrar carátula del juego?")) {
+			document.title = "ART_DELETE:" + gSelectedRowIndex + "|" + gameName;
+		}
+	} else {
+		var fileInput = document.createElement("input");
+		fileInput.type = "file"; fileInput.accept = "image/*";
+		fileInput.onchange = function(e) {
+			var file = e.target.files; if (!file) return;
+			var reader = new FileReader();
+			reader.onload = function(evt) {
+				document.title = "ART_UPDATE:" + gSelectedRowIndex + "|" + gameName + "|" + evt.target.result;
+			};
+			reader.readAsDataURL(file);
+		};
+		fileInput.click();
+	}
+};
+
+function updateInputsFromLayout() {
+	if (gIsTextMode) return;
+	var raw = gRaws[gIndex]; if (!raw) return;
+	byId('imgX').value = raw.xLeft; byId('imgY').value = raw.yTop;
+	byId('imgW').value = raw.xRight - raw.xLeft; byId('imgH').value = raw.yBottom - raw.yTop;
+}
+
+gobj.rawUpdateLayout = function(render) {
+	if (gIsTextMode) return;
+	var raw = gRaws[gIndex]; if (!raw) return;
+	raw.xLeft = parseInt(byId('imgX').value) || 0; raw.yTop = parseInt(byId('imgY').value) || 0;
+	raw.xRight = raw.xLeft + (parseInt(byId('imgW').value) || 0);
+	raw.yBottom = raw.yTop + (parseInt(byId('imgH').value) || 0);
+	if (render) renderAll();
+};
+
+function renderAll() {
+	if (!g2D || gIsTextMode) return;
+	g2D.clearRect(0, 0, gWidth, gHeight);
+	if (gIsSingleMode) { renderImageBytes(0); } 
+	else {
+		if (gRaws.length > 0) renderImageBytes(0);
+		if (gIndex > 0 && gIndex < gRaws.length) renderImageBytes(gIndex);
+	}
+	var raw = gRaws[gIndex];
+	if (raw && (raw.xRight - raw.xLeft > 0)) {
+		g2D.save(); g2D.globalCompositeOperation = 'difference';
+		g2D.strokeStyle = 'white'; g2D.lineWidth = 1;
+		g2D.strokeRect(raw.xLeft, raw.yTop, raw.xRight - raw.xLeft, raw.yBottom - raw.yTop);
+		g2D.fillStyle = 'white'; g2D.fillRect(raw.xRight - handleSize/2, raw.yBottom - handleSize/2, handleSize, handleSize);
+		g2D.restore();
+	}
+}
+
+function renderImageBytes(index) {
+	var raw = gRaws[index]; if (!raw || (raw.xRight - raw.xLeft) <= 0 || (raw.yBottom - raw.yTop) <= 0) return;
+	var w = raw.xRight - raw.xLeft, h = raw.yBottom - raw.yTop;
+	var imageData = g2D.createImageData(w, h), u8c = imageData.data, ofsRGBA = 0;
+	
+	if (raw.pixelData) {
+		for (var i = 0; i < raw.pixelData.length; i++) u8c[i] = raw.pixelData[i];
+	} else {
+		var ofs565 = raw.byteOffset; if (ofs565 >= gDataView.byteLength) return;
+		for (var p = 0; p < w * h; p++) {
+			if (ofs565 + 1 >= gDataView.byteLength) break;
+			var c = gDataView.getUint16(ofs565, true); ofs565 += 2;
+			u8c[ofsRGBA++] = (c >> 11 & 31) * 255 / 31; u8c[ofsRGBA++] = (c >> 5 & 63) * 255 / 63;
+			u8c[ofsRGBA++] = (c & 31) * 255 / 31; u8c[ofsRGBA++] = 255;
+		}
+	}
+	g2D.putImageData(imageData, raw.xLeft, raw.yTop);
+}
+gobj.rawReplace = function(inputEl) {
+	if (gIsTextMode || !inputEl || !inputEl.files || inputEl.files.length === 0 || !gDataView) return;
+	gobj.saveHistoryState();
+	var reader = new FileReader();
+	reader.onload = function(e) {
+		var img = new Image();
+		img.onload = function() {
+			lastLoadedImgElement = img; var raw = gRaws[gIndex];
+			var w = (raw.xRight - raw.xLeft > 0) ? (raw.xRight - raw.xLeft) : img.width;
+			var h = (raw.yBottom - raw.yTop > 0) ? (raw.yBottom - raw.yTop) : img.height;
+			var tempCanvas = document.createElement('canvas'); tempCanvas.width = w; tempCanvas.height = h;
+			var tempCtx = tempCanvas.getContext('2d'); tempCtx.drawImage(img, 0, 0, w, h);
+			raw.pixelData = tempCtx.getImageData(0, 0, w, h).data; renderAll();
+		};
+		img.src = e.target.result;
+	};
+	reader.readAsDataURL(inputEl.files[0]);
+};
+
+gobj.rawDownload = function() {
+	// EXPORTADOR REMASTERIZADO PARA TABLA REJILLA (.TXT / .CFG)
+	if (gIsTextMode) {
+		// Unimos el array dinámico de las celdas usando saltos de línea limpios
+		var textContent = gTextLines.join("\r\n");
+		var base64Result = window.btoa(unescape(encodeURIComponent(textContent)));
+		
+		if (window.external && window.external.SaveRawData) {
+			window.external.SaveRawData(gFileName, base64Result);
+		} else {
+			document.title = "SAVERAW:" + gFileName + "|" + base64Result;
+		}
+		return;
+	}
+
+	if (gRaws.length === 0) return;
+	var outputBuffer, outView;
+	if (gIsSingleMode) {
+		var raw = gRaws[0]; var w = raw.xRight - raw.xLeft, h = raw.yBottom - raw.yTop;
+		outputBuffer = new ArrayBuffer(w * h * 2); outView = new DataView(outputBuffer); var ofs = 0;
+		if (raw.pixelData) {
+			var idx = 0;
+			for (var p = 0; p < w * h; p++) {
+				var r = raw.pixelData[idx++], g = raw.pixelData[idx++], b = raw.pixelData[idx++]; idx++;
+				var rgb565 = ((r * 31 / 255) & 31) << 11 | ((g * 63 / 255) & 63) << 5 | ((b * 31 / 255) & 31);
+				outView.setUint16(ofs, rgb565, true); ofs += 2;
+			}
+		} else {
+			var old = raw.byteOffset;
+			for (var p = 0; p < w * h; p++) {
+				var rgb565 = (old + 1 < gDataView.byteLength) ? gDataView.getUint16(old, true) : 0; old += 2;
+				outView.setUint16(ofs, rgb565, true); ofs += 2;
+			}
+		}
+	} else {
+		var totalH = gRaws.length * 16, currentOfs = totalH, totalP = 0;
+		for (var i = 0; i < gRaws.length; i++) { totalP += ((gRaws[i].xRight - gRaws[i].xLeft) * (gRaws[i].yBottom - gRaws[i].yTop)) * 2; }
+		outputBuffer = new ArrayBuffer(totalH + totalP); outView = new DataView(outputBuffer);
+		for (var i = 0; i < gRaws.length; i++) {
+			var raw = gRaws[i], w = raw.xRight - raw.xLeft, h = raw.yBottom - raw.yTop;
+			outView.setUint32(i * 16, currentOfs, true);
+			outView.setUint16(i * 16 + 4, gWidth, true); outView.setUint16(i * 16 + 6, gHeight, true);
+			outView.setUint16(i * 16 + 8, raw.xLeft, true); outView.setUint16(i * 16 + 10, raw.yTop, true);
+			outView.setUint16(i * 16 + 12, raw.xRight, true); outView.setUint16(i * 16 + 14, raw.yBottom, true);
+			if (w > 0 && h > 0) {
+				if (raw.pixelData) {
+					var idx = 0;
+					for (var p = 0; p < w * h; p++) {
+						var r = raw.pixelData[idx++], g = raw.pixelData[idx++], b = raw.pixelData[idx++]; idx++;
+						var rgb565 = ((r * 31 / 255) & 31) << 11 | ((g * 63 / 255) & 63) << 5 | ((b * 31 / 255) & 31);
+						outView.setUint16(currentOfs, rgb565, true); currentOfs += 2;
+					}
+				} else {
+					var old = raw.byteOffset;
+					for (var p = 0; p < w * h; p++) {
+						var rgb565 = (old + 1 < gDataView.byteLength) ? gDataView.getUint16(old, true) : 0; old += 2;
+						outView.setUint16(currentOfs, rgb565, true); currentOfs += 2;
+					}
+				}
+			}
+		}
+	}
+	
+	var u8array = new Uint8Array(outputBuffer); var bString = "";
+	for (var i = 0; i < u8array.length; i++) { bString += String.fromCharCode(u8array[i]); }
+	var base64Result = window.btoa(bString);
+	
+	if (window.external && window.external.SaveRawData) {
+		window.external.SaveRawData(gFileName, base64Result);
+	} else {
+		document.title = "SAVERAW:" + gFileName + "|" + base64Result;
+	}
+};
+
+var canvasEl = byId('2d');
+canvasEl.onmousedown = function(e) {
+	if (gIsTextMode || !gDataView || gRaws.length === 0) return;
+	var rect = canvasEl.getBoundingClientRect();
+	var mouseX = e.clientX - rect.left, mouseY = e.clientY - rect.top, raw = gRaws[gIndex]; if (!raw) return;
+	if (Math.abs(mouseX - raw.xRight) <= handleSize && Math.abs(mouseY - raw.yBottom) <= handleSize) {
+		gobj.saveHistoryState(); isResizing = true; dragStartX = mouseX; dragStartY = mouseY; initialXRight = raw.xRight; initialYBottom = raw.yBottom; return;
+	}
+	if (mouseX >= raw.xLeft && mouseX <= raw.xRight && mouseY >= raw.yTop && mouseY <= raw.yBottom) {
+		gobj.saveHistoryState(); isDragging = true; dragStartX = mouseX; dragStartY = mouseY;
+		initialXLeft = raw.xLeft; initialYTop = raw.yTop; initialXRight = raw.xRight; initialYBottom = raw.yBottom;
+	}
+};
+
+window.onmousemove = function(e) {
+	if (gIsTextMode || (!isDragging && !isResizing)) return;
+	var rect = canvasEl.getBoundingClientRect(), mouseX = e.clientX - rect.left, mouseY = e.clientY - rect.top, raw = gRaws[gIndex]; if (!raw) return;
+	var dx = mouseX - dragStartX, dy = mouseY - dragStartY;
+	if (isDragging) {
+		raw.xLeft = initialXLeft + dx; raw.yTop = initialYTop + dy; raw.xRight = initialXRight + dx; raw.yBottom = initialYBottom + dy;
+	} else if (isResizing) {
+		raw.xRight = initialXRight + dx; raw.yBottom = initialYBottom + dy;
+		if (lastLoadedImgElement) {
+			var w = raw.xRight - raw.xLeft, h = raw.yBottom - raw.yTop;
+			if (w > 0 && h > 0) {
+				var tc = document.createElement('canvas'); tc.width = w; tc.height = h;
+				var tx = tc.getContext('2d'); tx.drawImage(lastLoadedImgElement, 0, 0, w, h);
+				raw.pixelData = tx.getImageData(0, 0, w, h).data;
+			}
+		}
+	}
+	gobj.rawUpdateLayout(false); renderAll();
+};
+
+window.onmouseup = function() { if (isDragging || isResizing) { isDragging = false; isResizing = false; } };
+
+window.loadRawFromSuite = gobj.loadRawFromSuite; window.rawUpdateLayout = gobj.rawUpdateLayout;
+window.rawReplace = gobj.rawReplace; window.rawDownload = gobj.rawDownload; window.rawUndo = gobj.rawUndo;
+window.rawToggleRotation = gobj.rawToggleRotation; window.rawIndexChange = gobj.rawIndexChange;
+
+})(window.RawEditor = window.RawEditor || {});
+</script>
+</body>
+</html>
