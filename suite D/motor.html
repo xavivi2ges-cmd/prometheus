@@ -274,12 +274,19 @@ function renderGameTableGrid(fullTextContent) {
 	var tbody = byId("gameTableBody");
 	tbody.innerHTML = "";
 	
-	gTextLines.forEach(function(line, idx) {
-		if(idx === gTextLines.length - 1 && line.trim() === "") return;
+	// 🛠️ MÁKINA: Cambiado a bucle 'for' clásico para evitar el Error de Script al cargar la lista
+	for (var idx = 0; idx < gTextLines.length; idx++) {
+		var line = gTextLines[idx];
+		
+		if (idx === gTextLines.length - 1 && line.trim() === "") {
+			continue; // En un bucle for se usa 'continue' en vez de 'return' para saltar líneas vacías
+		}
 		
 		var tr = document.createElement("tr");
 		tr.id = "gamerow_" + idx;
-		tr.onclick = function() { selectGameRow(idx); };
+		tr.onclick = (function(currentIdx) {
+			return function() { selectGameRow(currentIdx); };
+		})(idx);
 		
 		var tdId = document.createElement("td");
 		tdId.textContent = (idx + 1);
@@ -290,34 +297,102 @@ function renderGameTableGrid(fullTextContent) {
 		var input = document.createElement("input");
 		input.type = "text";
 		input.value = line;
-		input.oninput = function(e) {
-			gTextLines[idx] = e.target.value;
-			byId('btnUndo').disabled = false;
-		};
+		
+		input.oninput = (function(currentIdx) {
+			return function(e) {
+				gTextLines[currentIdx] = e.target.value;
+				byId('btnUndo').disabled = false;
+			};
+		})(idx);
 		
 		tdName.appendChild(input);
 		tr.appendChild(tdId);
 		tr.appendChild(tdName);
 		tbody.appendChild(tr);
-	});
+	}
 	gSelectedRowIndex = -1;
 }
 
 function selectGameRow(idx) {
 	gSelectedRowIndex = idx;
+	
+	// 1. Limpieza visual de la tabla (Bucle compatible 100% anti-errores)
 	var rows = document.querySelectorAll(".game-table tr");
-	rows.forEach(function(r) { r.classList.remove("selected-row"); });
+	for (var i = 0; i < rows.length; i++) {
+		rows[i].classList.remove("selected-row");
+	}
 	
 	var selectedRow = byId("gamerow_" + idx);
 	if (selectedRow) { selectedRow.classList.add("selected-row"); }
 	
-	var gameName = gTextLines[idx] || "";
+	// ==========================================
+	// 🛠️ EXTRACCIÓN MAESTRA: PROCESANDO EL FORMATO DE FILELIST.TXT
+	// ==========================================
+	var rawLine = gTextLines[idx] || "";
+	var gameNameClean = "";
+	
+	// 🎯 MÁKINA: Rompemos la línea usando el delimitador ';'
+	if (rawLine.indexOf(';') !== -1) {
+		var parts = rawLine.split(';');
+		// Cogemos la segunda parte (índice 1), que es el nombre para buscar el RAW
+		gameNameClean = parts[1] ? parts[1].trim() : parts[0].trim();
+	} else {
+		// Si por algún motivo la línea no lleva ';', usamos la línea entera
+		gameNameClean = rawLine.trim();
+	}
+	
+	// Limpieza estándar por si acaso vinieran rutas
+	gameNameClean = gameNameClean.substring(gameNameClean.lastIndexOf('/') + 1);
+	gameNameClean = gameNameClean.substring(gameNameClean.lastIndexOf('\\') + 1);
+	
+	// Le quitamos extensiones residuales si las tuviera (.zip, etc.)
+	if (gameNameClean.indexOf('.') !== -1) {
+		gameNameClean = gameNameClean.substring(0, gameNameClean.lastIndexOf('.'));
+	}
+	
+	// Construimos el nombre del archivo de carátula exacto para PowerShell
+	var targetArtFile = gameNameClean + "_000.raw";
+	
 	var statusText = byId("artStatusText");
-	statusText.textContent = "Juego: " + gameName + " | Buscando carátula asociada...";
+	statusText.textContent = "Cargando carátula interna para: " + targetArtFile;
 	statusText.style.color = "#5cb85c";
 	
-	document.title = "SELECT_GAME:" + idx + "|" + gameName;
+	var targetIdx = -1;
+	var sel = byId('sel');
+	
+	// ==========================================
+	// 🔍 RADAR CORREGIDO: VINCULACIÓN POR ÍNDICE EN EL CONTENEDOR .DAT
+	// ==========================================
+	if (sel && sel.options) {
+		for (var j = 0; j < sel.options.length; j++) {
+			// Sincronizamos con el valor numérico del Idx (0, 1, 2...) que coincide con la posición del juego
+			if (parseInt(sel.options[j].value) === idx) {
+				targetIdx = j;
+				break; // ¡Cazado!
+			}
+		}
+	}
+	
+	// ==========================================
+	// EJECUCIÓN Y COMUNICACIÓN CON POWERSHELL
+	// ==========================================
+	if (targetIdx !== -1) {
+		gIndex = parseInt(sel.options[targetIdx].value);
+		if (sel) { sel.value = sel.options[targetIdx].value; }
+		if (typeof renderAll === "function") { try { renderAll(); } catch(e) {} }
+		
+		statusText.textContent = "Juego: " + gameNameClean + " | ¡Carátula interna sincronizada!";
+		statusText.style.color = "#5cb85c";
+	} else {
+		// 🎯 MÁKINA: Aunque no esté en el .DAT del HTML, le mandamos el aviso a PowerShell
+		statusText.textContent = "Juego: " + gameNameClean + " | Enviando petición de carátula a PowerShell...";
+		statusText.style.color = "#8a2be2"; // Color morado de acción multimedia
+	}
+	
+	// 🚀 ESTA LÍNEA ES LA QUE ACTIVA TU BACKEND: Notificamos a PowerShell pase lo que pase
+	document.title = "SELECT_GAME:" + idx + "|" + targetArtFile;
 }
+
 
 gobj.artAction = function(actionType) {
 	if (gSelectedRowIndex === -1) {
