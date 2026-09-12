@@ -107,7 +107,7 @@
 				
 				<!-- 🌟 EL VISOR QUE FALTABA: Cuadro de 584x268 para pintar la carátula -->
 				<div style="width: 584px; height: 268px; display: flex; align-items: center; justify-content: center; background-color: #111; border: 1px dashed #44ium; margin: 15px auto 0 auto; overflow: hidden; border-radius: 4px;">
-			        <img id="visorCaratula" src="" alt="Sin carátula cargada" style="max-width: 100%; max-height: 100%; display: none; object-fit: contain;" />	
+			        <canvas id="visorCaratulaCanvas" width="568" height="284" style="width: 100%; height: auto; display: block; border: 1px solid #444; border-radius: 4px; background-color: #000;"></canvas>
 			</div>
 		</div>
 	</div>
@@ -386,7 +386,13 @@ function selectGameRow(idx) {
 		if (typeof renderAll === "function") { try { renderAll(); } catch(e) {} }
 		
 		statusText.textContent = "Juego: " + gameNameClean + " | ¡Carátula interna sincronizada!";
-		statusText.style.color = "#5cb85c";
+        statusText.style.color = "#5cb85c";
+    }
+} catch(err) {
+    console.log("Error en renderizado espejo: " + err.message);
+}
+		
+	 	
 	} else {
 		// 🎯 MÁKINA: Aunque no esté en el .DAT del HTML, le mandamos el aviso a PowerShell
 		statusText.textContent = "Juego: " + gameNameClean + " | Enviando petición de carátula a PowerShell...";
@@ -633,6 +639,7 @@ function artAction(accion) {
 </script>
 </body>
 </html>
+
 
 
 
