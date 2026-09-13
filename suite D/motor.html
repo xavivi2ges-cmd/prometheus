@@ -516,20 +516,25 @@ function renderImageBytes(index) {
 		}
 	g2D.putImageData(imageData, raw.xLeft, raw.yTop);
 
-	// 🌟 MÁKINA: Espejo automático al visor interactivo derecho
-	try {
-		var destCanvas = document.getElementById('visorCaratulaCanvas');
-		if (destCanvas) {
-			var destCtx = destCanvas.getContext('2d');
-			// Limpiamos el visor por si la imagen anterior era de otro tamaño
-			destCtx.clearRect(0, 0, destCanvas.width, destCanvas.height);
-			// Dibujamos la imagen recién pintada adaptándola al tamaño del visor (568x284)
-			destCtx.drawImage(canvasEl, raw.xLeft, raw.yTop, w, h, 0, 0, destCanvas.width, destCanvas.height);
-		}
-	} catch(err) {
-		console.log("Error en el visor derecho: " + err.message);
-	}
+// 🌟 MÁKINA: Espejo automático al visor interactivo derecho
+try {
+    var destCanvas = document.getElementById('visorCaratulaCanvas');
+    if (destCanvas) {
+        var destCtx = destCanvas.getContext('2d');
+        // Limpiamos el visor por si la imagen anterior era de otro tamaño
+        destCtx.clearRect(0, 0, destCanvas.width, destCanvas.height);
+        
+        // Obtenemos una referencia limpia al lienzo principal de origen
+        var srcCanvas = document.getElementById('2d');
+        if (srcCanvas && w > 0 && h > 0) {
+            // Dibujamos la región exacta adaptándola al visor (568x284)
+            destCtx.drawImage(srcCanvas, raw.xLeft, raw.yTop, w, h, 0, 0, destCanvas.width, destCanvas.height);
+        }
+    }
+} catch(err) {
+    console.error("Error en el espejo del visor interactivo:", err);
 }
+
 gobj.rawReplace = function(inputEl) {
 	if (gIsTextMode || !inputEl || !inputEl.files || inputEl.files.length === 0 || !gDataView) return;
 	gobj.saveHistoryState();
@@ -657,42 +662,53 @@ window.onmousemove = function(e) {
 	gobj.rawUpdateLayout(false); renderAll();
 };
 
-window.onmouseup = function() { if (isDragging || isResizing) { isDragging = false; isResizing = false; } };
+window.onmouseup = function() { 
+    if (typeof isDragging !== 'undefined' && typeof isResizing !== 'undefined') {
+        if (isDragging || isResizing) { 
+            isDragging = false; 
+            isResizing = false; 
+        } 
+    }
+};
 
-window.loadRawFromSuite = gobj.loadRawFromSuite; window.rawUpdateLayout = gobj.rawUpdateLayout;
-window.rawReplace = gobj.rawReplace; window.rawDownload = gobj.rawDownload; window.rawUndo = gobj.rawUndo;
-window.rawToggleRotation = gobj.rawToggleRotation; window.rawIndexChange = gobj.rawIndexChange;
+// Asignaciones seguras comprobando si gobj existe
+if (typeof gobj !== 'undefined' && gobj) {
+    window.loadRawFromSuite = gobj.loadRawFromSuite; 
+    window.rawUpdateLayout = gobj.rawUpdateLayout;
+    window.rawReplace = gobj.rawReplace; 
+    window.rawDownload = gobj.rawDownload; 
+    window.rawUndo = gobj.rawUndo;
+    window.rawToggleRotation = gobj.rawToggleRotation; 
+    window.rawIndexChange = gobj.rawIndexChange;
+}
 
-})(window.RawEditor = window.RawEditor || {});
 // 🚀 FUNCIÓN PARA CONTROLAR EL VISOR MULTIMEDIA DE FORMA 100% INDEPENDIENTE
 function actualizarVisorMultimedia(pixelData, width, height) {
-    var canvas = document.getElementById("visorCaratulaCanvas");
+    var canvas = document.getElementById('visorCaratulaCanvas');
     if (!canvas) return;
-    var ctx = canvas.getContext("2d");
+    var ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    if (!pixelData || pixelData.length === 0) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        return;
+    }
+
+    var imgData = ctx.createImageData(width, height);
     
-    // Forzamos el tamaño interno del canvas de carátulas (568x284)
-    canvas.width = 568;
-    canvas.height = 284;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    // Si tenemos píxeles directos (RGBA / Uint8Array), los pintamos al momento
-    if (pixelData && pixelData.length > 0) {
-        // Creamos un canvas temporal para no deformar los bytes antes de escalar
-        var tempCanvas = document.createElement('canvas');
-        tempCanvas.width = width || 568;
-        tempCanvas.height = height || 284;
-        var tempCtx = tempCanvas.getContext('2d');
-        
-        var imgData = tempCtx.createImageData(tempCanvas.width, tempCanvas.height);
-        
-        // Bucle clásico de copiado compatible con motores antiguos si set() falla
-        if (imgData.data.set) {
-            imgData.data.set(pixelData);
-        } else {
-            for (var i = 0; i < pixelData.length; i++) {
-                imgData.data[i] = pixelData[i];
-            }
-        }
+    // Copia manual de píxeles compatible con navegadores antiguos
+    for (var i = 0; i < pixelData.length; i++) {
+        imgData.data[i] = pixelData[i];
+    }
+
+    ctx.putImageData(imgData, 0, 0);
+
+    // Activamos la visibilidad del panel multimedia
+    var artPanel = document.getElementById('artPanel');
+    if (artPanel) {
+        artPanel.style.display = 'block';
+    }
+}
         
         tempCtx.putImageData(imgData, 0, 0);
         
