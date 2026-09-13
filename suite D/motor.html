@@ -438,29 +438,30 @@ function selectGameRow(idx) {
 
 
 gobj.artAction = function(actionType) {
-	if (gSelectedRowIndex === -1) {
-		alert("Mákina, primero debes seleccionar una fila haciendo clic en la lista.");
-		return;
-	}
-	var gameName = gTextLines[gSelectedRowIndex] || "";
-	
-	if (actionType === 'delete') {
-		if (confirm("¿Borrar carátula del juego?")) {
-			document.title = "ART_DELETE:" + gSelectedRowIndex + "|" + gameName;
-		}
-	} else {
-		var fileInput = document.createElement("input");
-		fileInput.type = "file"; fileInput.accept = "image/*";
-		fileInput.onchange = function(e) {
-			var file = e.target.files; if (!file) return;
-			var reader = new FileReader();
-			reader.onload = function(evt) {
-				document.title = "ART_UPDATE:" + gSelectedRowIndex + "|" + gameName + "|" + evt.target.result;
-			};
-			reader.readAsDataURL(file);
-		};
-		fileInput.click();
-	}
+    if (gSelectedRowIndex === -1) {
+        alert("Mákina, primero debes seleccionar una fila haciendo clic en la lista.");
+        return;
+    }
+    var gameName = gTextLines[gSelectedRowIndex] || "";
+    
+    // Cambiado a los strings correctos que vienen del HTML ('add', 'change', 'delete')
+    if (actionType === 'delete') {
+        if (confirm("¿Borrar carátula del juego?")) {
+            document.title = "ART_DELETE:" + gSelectedRowIndex + "|" + gameName;
+        }
+    } else if (actionType === 'add' || actionType === 'change') {
+        var fileInput = document.createElement("input");
+        fileInput.type = "file"; fileInput.accept = "image/*";
+        fileInput.onchange = function(e) {
+            var file = e.target.files[0]; if (!file) return;
+            var reader = new FileReader();
+            reader.onload = function(evt) {
+                document.title = "ART_UPDATE:" + gSelectedRowIndex + "|" + gameName + "|" + evt.target.result;
+            };
+            reader.readAsDataURL(file);
+        };
+        fileInput.click();
+    }
 };
 
 function updateInputsFromLayout() {
