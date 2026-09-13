@@ -383,16 +383,12 @@ function selectGameRow(idx) {
 	if (targetIdx !== -1) {
 		gIndex = parseInt(sel.options[targetIdx].value);
 		if (sel) { sel.value = sel.options[targetIdx].value; }
-		if (typeof renderAll === "function") { try { renderAll(); } catch(e) {} }
+		if (typeof renderAll === "function") { 
+			try { renderAll(); } catch(e) {} 
+		}
 		
 		statusText.textContent = "Juego: " + gameNameClean + " | ¡Carátula interna sincronizada!";
-        statusText.style.color = "#5cb85c";
-    }
-} catch(err) {
-    console.log("Error en renderizado espejo: " + err.message);
-}
-		
-	 	
+		statusText.style.color = "#5cb85c";
 	} else {
 		// 🎯 MÁKINA: Aunque no esté en el .DAT del HTML, le mandamos el aviso a PowerShell
 		statusText.textContent = "Juego: " + gameNameClean + " | Enviando petición de carátula a PowerShell...";
@@ -479,8 +475,22 @@ function renderImageBytes(index) {
 			u8c[ofsRGBA++] = (c >> 11 & 31) * 255 / 31; u8c[ofsRGBA++] = (c >> 5 & 63) * 255 / 63;
 			u8c[ofsRGBA++] = (c & 31) * 255 / 31; u8c[ofsRGBA++] = 255;
 		}
-	}
+		}
 	g2D.putImageData(imageData, raw.xLeft, raw.yTop);
+
+	// 🌟 MÁKINA: Espejo automático al visor interactivo derecho
+	try {
+		var destCanvas = document.getElementById('visorCaratulaCanvas');
+		if (destCanvas) {
+			var destCtx = destCanvas.getContext('2d');
+			// Limpiamos el visor por si la imagen anterior era de otro tamaño
+			destCtx.clearRect(0, 0, destCanvas.width, destCanvas.height);
+			// Dibujamos la imagen recién pintada adaptándola al tamaño del visor (568x284)
+			destCtx.drawImage(canvasEl, raw.xLeft, raw.yTop, w, h, 0, 0, destCanvas.width, destCanvas.height);
+		}
+	} catch(err) {
+		console.log("Error en el visor derecho: " + err.message);
+	}
 }
 gobj.rawReplace = function(inputEl) {
 	if (gIsTextMode || !inputEl || !inputEl.files || inputEl.files.length === 0 || !gDataView) return;
@@ -639,6 +649,7 @@ function artAction(accion) {
 </script>
 </body>
 </html>
+
 
 
 
