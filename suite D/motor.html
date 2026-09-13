@@ -176,6 +176,43 @@ gobj.rawIndexChange = function(target) {
 };
 
 gobj.loadRawFromSuite = function(fileName, base64Data) {
+	// 🎯 RADAR VINTAGE: Cambiado .includes por .indexOf para motores antiguos
+	if (fileName.toLowerCase().indexOf("_000.raw") !== -1 && gIsTextMode) {
+		var binaryString = window.atob(base64Data);
+		var len = binaryString.length;
+		var bytes = new Uint8Array(len);
+		for (var i = 0; i < len; i++) { bytes[i] = binaryString.charCodeAt(i); }
+		
+		// Decodificamos el formato RGB565 de PowerShell a píxeles RGBA estándar
+		var totalPixels = len / 2;
+		var w = 568, h = 284; // Valores por defecto del visor
+		
+		// Autodetección de dimensiones por conteo de píxeles
+		if (totalPixels === 568 * 284) { w = 568; h = 284; }
+		else if (totalPixels === 1280 * 720) { w = 1280; h = 720; }
+		
+		var rgbaData = new Uint8Array(w * h * 4);
+		var ofsRGBA = 0;
+		var dataViewTemp = new DataView(bytes.buffer);
+		var ofs565 = 0;
+		
+		for (var p = 0; p < w * h; p++) {
+			if (ofs565 + 1 >= dataViewTemp.byteLength) break;
+			var c = dataViewTemp.getUint16(ofs565, true); ofs565 += 2;
+			rgbaData[ofsRGBA++] = (c >> 11 & 31) * 255 / 31; // R
+			rgbaData[ofsRGBA++] = (c >> 5 & 63) * 255 / 63;  // G
+			rgbaData[ofsRGBA++] = (c & 31) * 255 / 31;       // B
+			rgbaData[ofsRGBA++] = 255;                        // A
+		}
+		
+		// Enviamos los datos al visor independiente sin tocar ni despertar el lienzo grande
+		if (typeof actualizarVisorMultimedia === "function") {
+			actualizarVisorMultimedia(rgbaData, w, h);
+		}
+		return; // 🛑 Salimos inmediatamente
+	}
+
+	// 🛠️ Tu código original continúa de manera normal a partir de aquí:
 	gFileName = fileName;
 	byId('currentFileName').textContent = "Archivo: " + fileName;
 	g2D = byId('2d').getContext('2d');
@@ -626,7 +663,50 @@ window.rawReplace = gobj.rawReplace; window.rawDownload = gobj.rawDownload; wind
 window.rawToggleRotation = gobj.rawToggleRotation; window.rawIndexChange = gobj.rawIndexChange;
 
 })(window.RawEditor = window.RawEditor || {});
-// 🚀 FUNCIÓN PARA CONTROLAR LOS BOTONES DE GESTIÓN MULTIMEDIA
+// 🚀 FUNCIÓN PARA CONTROLAR EL VISOR MULTIMEDIA DE FORMA 100% INDEPENDIENTE
+function actualizarVisorMultimedia(pixelData, width, height) {
+    var canvas = document.getElementById("visorCaratulaCanvas");
+    if (!canvas) return;
+    var ctx = canvas.getContext("2d");
+    
+    // Forzamos el tamaño interno del canvas de carátulas (568x284)
+    canvas.width = 568;
+    canvas.height = 284;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Si tenemos píxeles directos (RGBA / Uint8Array), los pintamos al momento
+    if (pixelData && pixelData.length > 0) {
+        // Creamos un canvas temporal para no deformar los bytes antes de escalar
+        var tempCanvas = document.createElement('canvas');
+        tempCanvas.width = width || 568;
+        tempCanvas.height = height || 284;
+        var tempCtx = tempCanvas.getContext('2d');
+        
+        var imgData = tempCtx.createImageData(tempCanvas.width, tempCanvas.height);
+        
+        // Bucle clásico de copiado compatible con motores antiguos si set() falla
+        if (imgData.data.set) {
+            imgData.data.set(pixelData);
+        } else {
+            for (var i = 0; i < pixelData.length; i++) {
+                imgData.data[i] = pixelData[i];
+            }
+        }
+        
+        tempCtx.putImageData(imgData, 0, 0);
+        
+        // Dibujamos en el visor final escalando correctamente al espacio de 568x284
+        ctx.drawImage(tempCanvas, 0, 0, tempCanvas.width, tempCanvas.height, 0, 0, canvas.width, canvas.height);
+    }
+    
+    // Cambiamos el estado a verde al instante
+    var status = document.getElementById("artStatusText");
+    if (status) {
+        status.textContent = "¡Carátula Sincronizada!";
+        status.style.color = "#28a745"; // Verde definitivo de éxito
+    }
+}
+
 function artAction(accion) {
     console.log("Acción multimedia solicitada: " + accion);
     
@@ -649,10 +729,3 @@ function artAction(accion) {
 </script>
 </body>
 </html>
-
-
-
-
-
-
-
