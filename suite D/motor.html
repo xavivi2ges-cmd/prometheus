@@ -662,86 +662,45 @@ window.onmousemove = function(e) {
 	gobj.rawUpdateLayout(false); renderAll();
 };
 
-window.onmouseup = function() { 
-    if (typeof isDragging !== 'undefined' && typeof isResizing !== 'undefined') {
-        if (isDragging || isResizing) { 
-            isDragging = false; 
-            isResizing = false; 
-        } 
+} // <--- ESTA LLAVE CIERRA CUALQUIER FUNCIÓN ANTERIOR QUE HAYA QUEDADO ABIERTA
+
+window.onmouseup = function() {
+    if (gobj.g_mouse_down) {
+        gobj.g_mouse_down = false;
     }
 };
 
-if (typeof gobj !== 'undefined' && gobj) {
-    window.loadRawFromSuite = gobj.loadRawFromSuite; 
-    window.rawUpdateLayout = gobj.rawUpdateLayout;
-    window.rawReplace = gobj.rawReplace; 
-    window.rawDownload = gobj.rawDownload; 
-    window.rawUndo = gobj.rawUndo;
-    window.rawToggleRotation = gobj.rawToggleRotation; 
-    window.rawIndexChange = gobj.rawIndexChange;
-}
+// Asignación de funciones globales desde el objeto de control gobj
+window.AlCambiarTamano      = function() { gobj.AlCambiarTamano(); };
+window.AlMoverRaton         = function(e) { gobj.AlMoverRaton(e); };
+window.AlPulsarRaton        = function(e) { gobj.AlPulsarRaton(e); };
+window.AlSoltarRaton        = function(e) { gobj.AlSoltarRaton(e); };
+window.AlDobleClick         = function(e) { gobj.AlDobleClick(e); };
+window.AlRuedaRaton         = function(e) { gobj.AlRuedaRaton(e); };
+window.AlSalirRaton         = function(e) { gobj.AlSalirRaton(e); };
+window.AlEntrarRaton        = function(e) { gobj.AlEntrarRaton(e); };
+window.AlMenuContextual     = function(e) { gobj.AlMenuContextual(e); };
+window.AlPulsarTecla        = function(e) { gobj.AlPulsarTecla(e); };
 
-// 🚀 FUNCIÓN PARA CONTROLAR EL VISOR MULTIMEDIA DE FORMA 100% INDEPENDIENTE
-function actualizarVisorMultimedia(pixelData, width, height) {
-    var canvas = document.getElementById('visorCaratulaCanvas');
+// Función de renderizado del visor multimedia corregida
+function actualizarVisorMultimedia(imagenBase64, anchoDestino, altoDestino) {
+    var canvas = document.getElementById('visorCanvas');
     if (!canvas) return;
+    
     var ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    if (!pixelData || pixelData.length === 0) {
+    var img = new Image();
+    
+    img.onload = function() {
+        canvas.width = anchoDestino;
+        canvas.height = altoDestino;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        return;
-    }
-
-    var imgData = ctx.createImageData(width, height);
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, anchoDestino, altoDestino);
+    };
     
-    // Copia manual de píxeles compatible con navegadores antiguos
-    for (var i = 0; i < pixelData.length; i++) {
-        imgData.data[i] = pixelData[i];
-    }
-
-    ctx.putImageData(imgData, 0, 0);
-
-    // Activamos la visibilidad del panel multimedia
-    var artPanel = document.getElementById('artPanel');
-    if (artPanel) {
-        artPanel.style.display = 'block';
-    }
+    img.src = "data:image/png;base64," + imagenBase64;
 }
-        
-        tempCtx.putImageData(imgData, 0, 0);
-        
-        // Dibujamos en el visor final escalando correctamente al espacio de 568x284
-        ctx.drawImage(tempCanvas, 0, 0, tempCanvas.width, tempCanvas.height, 0, 0, canvas.width, canvas.height);
-    }
-    
-    // Cambiamos el estado a verde al instante
-    var status = document.getElementById("artStatusText");
-    if (status) {
-        status.textContent = "¡Carátula Sincronizada!";
-        status.style.color = "#28a745"; // Verde definitivo de éxito
-    }
-}
-
-function artAction(accion) {
-    console.log("Acción multimedia solicitada: " + accion);
-    
-    // Evaluamos qué botón ha pulsado el usuario
-    switch(accion) {
-        case 'añadir':
-            // Aquí irá tu lógica para buscar o añadir carátula
-            break;
-        case 'borrar':
-            // Aquí la lógica para eliminar
-            break;
-        case 'exportar':
-            // Aquí la lógica para extraer el raw
-            break;
-        default:
-            break;
-    }
-}
-
 </script>
 </body>
 </html>
