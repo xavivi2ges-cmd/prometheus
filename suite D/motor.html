@@ -176,43 +176,6 @@ gobj.rawIndexChange = function(target) {
 };
 
 gobj.loadRawFromSuite = function(fileName, base64Data) {
-	// 🎯 RADAR VINTAGE: Cambiado .includes por .indexOf para motores antiguos
-	if (fileName.toLowerCase().indexOf("_000.raw") !== -1 && gIsTextMode) {
-		var binaryString = window.atob(base64Data);
-		var len = binaryString.length;
-		var bytes = new Uint8Array(len);
-		for (var i = 0; i < len; i++) { bytes[i] = binaryString.charCodeAt(i); }
-		
-		// Decodificamos el formato RGB565 de PowerShell a píxeles RGBA estándar
-		var totalPixels = len / 2;
-		var w = 568, h = 284; // Valores por defecto del visor
-		
-		// Autodetección de dimensiones por conteo de píxeles
-		if (totalPixels === 568 * 284) { w = 568; h = 284; }
-		else if (totalPixels === 1280 * 720) { w = 1280; h = 720; }
-		
-		var rgbaData = new Uint8Array(w * h * 4);
-		var ofsRGBA = 0;
-		var dataViewTemp = new DataView(bytes.buffer);
-		var ofs565 = 0;
-		
-		for (var p = 0; p < w * h; p++) {
-			if (ofs565 + 1 >= dataViewTemp.byteLength) break;
-			var c = dataViewTemp.getUint16(ofs565, true); ofs565 += 2;
-			rgbaData[ofsRGBA++] = (c >> 11 & 31) * 255 / 31; // R
-			rgbaData[ofsRGBA++] = (c >> 5 & 63) * 255 / 63;  // G
-			rgbaData[ofsRGBA++] = (c & 31) * 255 / 31;       // B
-			rgbaData[ofsRGBA++] = 255;                        // A
-		}
-		
-		// Enviamos los datos al visor independiente sin tocar ni despertar el lienzo grande
-		if (typeof actualizarVisorMultimedia === "function") {
-			actualizarVisorMultimedia(rgbaData, w, h);
-		}
-		return; // 🛑 Salimos inmediatamente
-	}
-
-	// 🛠️ Tu código original continúa de manera normal a partir de aquí:
 	gFileName = fileName;
 	byId('currentFileName').textContent = "Archivo: " + fileName;
 	g2D = byId('2d').getContext('2d');
@@ -438,30 +401,29 @@ function selectGameRow(idx) {
 
 
 gobj.artAction = function(actionType) {
-    if (gSelectedRowIndex === -1) {
-        alert("Mákina, primero debes seleccionar una fila haciendo clic en la lista.");
-        return;
-    }
-    var gameName = gTextLines[gSelectedRowIndex] || "";
-    
-    // Cambiado a los strings correctos que vienen del HTML ('add', 'change', 'delete')
-    if (actionType === 'delete') {
-        if (confirm("¿Borrar carátula del juego?")) {
-            document.title = "ART_DELETE:" + gSelectedRowIndex + "|" + gameName;
-        }
-    } else if (actionType === 'add' || actionType === 'change') {
-        var fileInput = document.createElement("input");
-        fileInput.type = "file"; fileInput.accept = "image/*";
-        fileInput.onchange = function(e) {
-            var file = e.target.files[0]; if (!file) return;
-            var reader = new FileReader();
-            reader.onload = function(evt) {
-                document.title = "ART_UPDATE:" + gSelectedRowIndex + "|" + gameName + "|" + evt.target.result;
-            };
-            reader.readAsDataURL(file);
-        };
-        fileInput.click();
-    }
+	if (gSelectedRowIndex === -1) {
+		alert("Mákina, primero debes seleccionar una fila haciendo clic en la lista.");
+		return;
+	}
+	var gameName = gTextLines[gSelectedRowIndex] || "";
+	
+	if (actionType === 'delete') {
+		if (confirm("¿Borrar carátula del juego?")) {
+			document.title = "ART_DELETE:" + gSelectedRowIndex + "|" + gameName;
+		}
+	} else {
+		var fileInput = document.createElement("input");
+		fileInput.type = "file"; fileInput.accept = "image/*";
+		fileInput.onchange = function(e) {
+			var file = e.target.files; if (!file) return;
+			var reader = new FileReader();
+			reader.onload = function(evt) {
+				document.title = "ART_UPDATE:" + gSelectedRowIndex + "|" + gameName + "|" + evt.target.result;
+			};
+			reader.readAsDataURL(file);
+		};
+		fileInput.click();
+	}
 };
 
 function updateInputsFromLayout() {
@@ -516,25 +478,20 @@ function renderImageBytes(index) {
 		}
 	g2D.putImageData(imageData, raw.xLeft, raw.yTop);
 
-// 🌟 MÁKINA: Espejo automático al visor interactivo derecho
-try {
-    var destCanvas = document.getElementById('visorCaratulaCanvas');
-    if (destCanvas) {
-        var destCtx = destCanvas.getContext('2d');
-        // Limpiamos el visor por si la imagen anterior era de otro tamaño
-        destCtx.clearRect(0, 0, destCanvas.width, destCanvas.height);
-        
-        // Obtenemos una referencia limpia al lienzo principal de origen
-        var srcCanvas = document.getElementById('2d');
-        if (srcCanvas && w > 0 && h > 0) {
-            // Dibujamos la región exacta adaptándola al visor (568x284)
-            destCtx.drawImage(srcCanvas, raw.xLeft, raw.yTop, w, h, 0, 0, destCanvas.width, destCanvas.height);
-        }
-    }
-} catch(err) {
-    console.error("Error en el espejo del visor interactivo:", err);
+	// 🌟 MÁKINA: Espejo automático al visor interactivo derecho
+	try {
+		var destCanvas = document.getElementById('visorCaratulaCanvas');
+		if (destCanvas) {
+			var destCtx = destCanvas.getContext('2d');
+			// Limpiamos el visor por si la imagen anterior era de otro tamaño
+			destCtx.clearRect(0, 0, destCanvas.width, destCanvas.height);
+			// Dibujamos la imagen recién pintada adaptándola al tamaño del visor (568x284)
+			destCtx.drawImage(canvasEl, raw.xLeft, raw.yTop, w, h, 0, 0, destCanvas.width, destCanvas.height);
+		}
+	} catch(err) {
+		console.log("Error en el visor derecho: " + err.message);
+	}
 }
-
 gobj.rawReplace = function(inputEl) {
 	if (gIsTextMode || !inputEl || !inputEl.files || inputEl.files.length === 0 || !gDataView) return;
 	gobj.saveHistoryState();
@@ -662,45 +619,33 @@ window.onmousemove = function(e) {
 	gobj.rawUpdateLayout(false); renderAll();
 };
 
-} // <--- ESTA LLAVE CIERRA CUALQUIER FUNCIÓN ANTERIOR QUE HAYA QUEDADO ABIERTA
+window.onmouseup = function() { if (isDragging || isResizing) { isDragging = false; isResizing = false; } };
 
-window.onmouseup = function() {
-    if (gobj.g_mouse_down) {
-        gobj.g_mouse_down = false;
+window.loadRawFromSuite = gobj.loadRawFromSuite; window.rawUpdateLayout = gobj.rawUpdateLayout;
+window.rawReplace = gobj.rawReplace; window.rawDownload = gobj.rawDownload; window.rawUndo = gobj.rawUndo;
+window.rawToggleRotation = gobj.rawToggleRotation; window.rawIndexChange = gobj.rawIndexChange;
+
+})(window.RawEditor = window.RawEditor || {});
+// 🚀 FUNCIÓN PARA CONTROLAR LOS BOTONES DE GESTIÓN MULTIMEDIA
+function artAction(accion) {
+    console.log("Acción multimedia solicitada: " + accion);
+    
+    // Evaluamos qué botón ha pulsado el usuario
+    switch(accion) {
+        case 'añadir':
+            // Aquí irá tu lógica para buscar o añadir carátula
+            break;
+        case 'borrar':
+            // Aquí la lógica para eliminar
+            break;
+        case 'exportar':
+            // Aquí la lógica para extraer el raw
+            break;
+        default:
+            break;
     }
-};
-
-// Asignación de funciones globales desde el objeto de control gobj
-window.AlCambiarTamano      = function() { gobj.AlCambiarTamano(); };
-window.AlMoverRaton         = function(e) { gobj.AlMoverRaton(e); };
-window.AlPulsarRaton        = function(e) { gobj.AlPulsarRaton(e); };
-window.AlSoltarRaton        = function(e) { gobj.AlSoltarRaton(e); };
-window.AlDobleClick         = function(e) { gobj.AlDobleClick(e); };
-window.AlRuedaRaton         = function(e) { gobj.AlRuedaRaton(e); };
-window.AlSalirRaton         = function(e) { gobj.AlSalirRaton(e); };
-window.AlEntrarRaton        = function(e) { gobj.AlEntrarRaton(e); };
-window.AlMenuContextual     = function(e) { gobj.AlMenuContextual(e); };
-window.AlPulsarTecla        = function(e) { gobj.AlPulsarTecla(e); };
-
-// Función de renderizado del visor multimedia corregida
-function actualizarVisorMultimedia(imagenBase64, anchoDestino, altoDestino) {
-    var canvas = document.getElementById('visorCanvas');
-    if (!canvas) return;
-    
-    var ctx = canvas.getContext('2d');
-    var img = new Image();
-    
-    img.onload = function() {
-        canvas.width = anchoDestino;
-        canvas.height = altoDestino;
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(img, 0, 0, anchoDestino, altoDestino);
-    };
-    
-    img.src = "data:image/png;base64," + imagenBase64;
 }
+
 </script>
 </body>
 </html>
