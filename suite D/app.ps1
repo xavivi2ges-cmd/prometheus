@@ -1,200 +1,370 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <title>Prometheus Suite D - Interfaz de Control</title>
-    <style>
-        :root {
-            --bg-dark: #121212;
-            --bg-panel: #1e1e1e;
-            --accent: #00adb5;
-            --text-main: #eeeeee;
-            --text-muted: #888888;
-            --border-color: #333333;
-        }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: var(--bg-dark);
-            color: var(--text-main);
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-        /* Barra de Pestañas Superior Corregida */
-        .tab-bar {
-            display: flex;
-            background-color: #000000;
-            border-bottom: 2px solid var(--border-color);
-        }
-        .tab-btn {
-            background: none; border: none;
-            color: var(--text-muted); padding: 15px 25px;
-            font-size: 14px; font-weight: bold;
-            cursor: pointer; transition: all 0.3s;
-        }
-        .tab-btn:hover { color: var(--text-main); background-color: #111; }
-        .tab-btn.active {
-            color: var(--accent);
-            border-bottom: 3px solid var(--accent);
-            background-color: var(--bg-panel);
-        }
-        /* Contenedores de Contenido */
-        .tab-content { display: none; flex: 1; height: calc(100vh - 52px); }
-        .tab-content.active { display: flex; }
+# --- PARCHE DE COMPATIBILIDAD GRÁFICA PARA WINDOWS ---
+$registryPath = "HKCU:\Software\Microsoft\Internet Explorer\Main\FeatureControl\FEATURE_BROWSER_EMULATION"
+$processName = [System.IO.Path]::GetFileName([System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
+if (-not (Test-Path $registryPath)) { New-Item $registryPath -Force | Out-Null }
+Set-ItemProperty -Path $registryPath -Name $processName -Value 11001 -Type DWord | Out-Null
+Set-ItemProperty -Path $registryPath -Name "powershell.exe" -Value 11001 -Type DWord | Out-Null
 
-        /* Estructura de Paneles Limpia */
-        .sidebar {
-            width: 320px; background-color: var(--bg-panel);
-            border-right: 1px solid var(--border-color);
-            display: flex; flex-direction: column; padding: 20px; gap: 15px;
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+Add-Type -AssemblyName System.IO.Compression
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+$global:VirtualFiles = @{}
+$global:VirtualDatFiles = @{}
+$global:CpdOriginalPath = ""
+$global:DatOriginalPath = ""
+
+$scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Definition
+$htmlPath = Join-Path $scriptPath "motor.html"
+
+# --- CONFIGURACIÓN DE LA SUITE A PANTALLA COMPLETA 1920x1080 ---
+$form = New-Object System.Windows.Forms.Form
+$form.Text = "Game Stick Lite - Suite Prometheus v3.0 (HCSEMI Manager)"
+$form.Size = New-Object System.Drawing.Size(1920, 1080)
+$form.StartPosition = "CenterScreen"
+$form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30)
+
+$tabControl = New-Object System.Windows.Forms.TabControl
+$tabControl.Dock = [System.Windows.Forms.DockStyle]::Fill
+$tabControl.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+
+$tabMenus = New-Object System.Windows.Forms.TabPage
+$tabMenus.Text = "  EDITOR DE INTERFAZ (.CPD)  "
+$tabMenus.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30)
+
+$tabJuegos = New-Object System.Windows.Forms.TabPage
+$tabJuegos.Text = "  GESTOR DE JUEGOS (.DAT)  "
+$tabJuegos.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30)
+
+$tabControl.Controls.Add($tabMenus)
+$tabControl.Controls.Add($tabJuegos)
+
+$webBrowser = New-Object System.Windows.Forms.WebBrowser
+$webBrowser.Dock = [System.Windows.Forms.DockStyle]::Fill
+$webBrowser.IsWebBrowserContextMenuEnabled = $false
+$webBrowser.AllowWebBrowserDrop = $false
+# =========================================================================
+# MAQUETACIÓN PESTAÑA 1: INTERFAZ DE MENÚS (.CPD)
+# =========================================================================
+$panelCpdLeft = New-Object System.Windows.Forms.Panel
+$panelCpdLeft.Size = New-Object System.Drawing.Size(280, 1040)
+$panelCpdLeft.Dock = [System.Windows.Forms.DockStyle]::Left
+$panelCpdLeft.BackColor = [System.Drawing.Color]::FromArgb(45, 45, 48)
+
+$btnLoadCpd = New-Object System.Windows.Forms.Button
+$btnLoadCpd.Text = "CARGAR RESOURCE.CPD / .WQW"
+$btnLoadCpd.Size = New-Object System.Drawing.Size(260, 45)
+$btnLoadCpd.Location = New-Object System.Drawing.Point(10, 15)
+$btnLoadCpd.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+$btnLoadCpd.ForeColor = [System.Drawing.Color]::White
+$btnLoadCpd.BackColor = [System.Drawing.Color]::FromArgb(74, 74, 229)
+$btnLoadCpd.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+
+$btnSaveCpd = New-Object System.Windows.Forms.Button
+$btnSaveCpd.Text = "GUARDAR CONTENEDOR FINAL"
+$btnSaveCpd.Size = New-Object System.Drawing.Size(260, 45)
+$btnSaveCpd.Location = New-Object System.Drawing.Point(10, 75)
+$btnSaveCpd.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+$btnSaveCpd.ForeColor = [System.Drawing.Color]::White
+$btnSaveCpd.BackColor = [System.Drawing.Color]::FromArgb(92, 184, 92)
+$btnSaveCpd.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+
+$listBoxCpd = New-Object System.Windows.Forms.ListBox
+$listBoxCpd.Location = New-Object System.Drawing.Point(10, 135)
+$listBoxCpd.Size = New-Object System.Drawing.Size(260, 840)
+$listBoxCpd.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30)
+$listBoxCpd.ForeColor = [System.Drawing.Color]::LightGray
+$listBoxCpd.Font = New-Object System.Drawing.Font("Consolas", 10)
+$listBoxCpd.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
+
+$panelCpdLeft.Controls.Add($btnLoadCpd)
+$panelCpdLeft.Controls.Add($btnSaveCpd)
+$panelCpdLeft.Controls.Add($listBoxCpd)
+$tabMenus.Controls.Add($panelCpdLeft)
+
+$btnLoadCpd.Add_Click({
+    $openDialog = New-Object System.Windows.Forms.OpenFileDialog
+    $openDialog.Filter = "Firmware Game Stick (*.cpd;*.wqw)|*.cpd;*.wqw"
+    $openDialog.Title = "Selecciona el archivo Resource del firmware"
+    
+    if ($openDialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+        $global:CpdOriginalPath = $openDialog.FileName
+        $bytes = [System.IO.File]::ReadAllBytes($global:CpdOriginalPath)
+        $len = $bytes.Length
+        $po = 0
+
+        while ($po + 30 -le $len) {
+            if ($bytes[$po] -eq 0x57 -and $bytes[$po+1] -eq 0x51 -and $bytes[$po+2] -eq 0x57 -and $bytes[$po+3] -eq 0x03) {
+                $bytes[$po] = 0x50; $bytes[$po+1] = 0x4b; $bytes[$po+2] = 0x03; $bytes[$po+3] = 0x04
+                $compSz = [System.BitConverter]::ToUInt32($bytes, $po + 18)
+                $nameLen = [System.BitConverter]::ToUInt16($bytes, $po + 26)
+                $extraLen = [System.BitConverter]::ToUInt16($bytes, $po + 28)
+                $po += 30
+                if ($po + $nameLen -le $len) { for ($pi = 0; $pi -lt $nameLen; $pi++) { $bytes[$po] = $bytes[$po] -bxor 0xe5; $po++ } }
+                $po += $extraLen + $compSz
+            } else { break }
         }
-        .main-viewer {
-            flex: 1; background-color: #151515;
-            display: flex; flex-direction: column;
-            align-items: center; justify-content: center;
-            padding: 20px; position: relative;
+        while ($po + 46 -le $len) {
+            if ($bytes[$po] -eq 0x57 -and $bytes[$po+1] -eq 0x51 -and $bytes[$po+2] -eq 0x57 -and $bytes[$po+3] -eq 0x02) {
+                $bytes[$po] = 0x50; $bytes[$po+1] = 0x4b; $bytes[$po+2] = 0x01; $bytes[$po+3] = 0x02
+                $nameLen = [System.BitConverter]::ToUInt16($bytes, $po + 28)
+                $extraLen = [System.BitConverter]::ToUInt16($bytes, $po + 30)
+                $po += 46
+                if ($po + $nameLen -le $len) { for ($pi = 0; $pi -lt $nameLen; $pi++) { $bytes[$po] = $bytes[$po] -bxor 0xe5; $po++ } }
+                $po += $extraLen
+            } else { break }
         }
-
-        .btn {
-            background-color: #252525; color: var(--text-main);
-            border: 1px solid var(--border-color); padding: 12px;
-            border-radius: 4px; cursor: pointer; font-weight: bold;
-            text-align: center; transition: background 0.2s;
-        }
-        .btn:hover { background-color: var(--accent); color: #000; }
-        .btn-primary { background-color: #2b579a; border: none; }
-        .btn-primary:hover { background-color: #3b78cd; }
-
-        .list-container {
-            flex: 1; border: 1px solid var(--border-color);
-            background-color: #111; border-radius: 4px; overflow-y: auto;
-        }
-        .game-item { padding: 10px; border-bottom: 1px solid #222; cursor: pointer; font-size: 13px; }
-        .game-item:hover, .game-item.selected { background-color: #252525; color: var(--accent); }
-
-        /* Visores con IDs y Clases de Tamaño Estricto (Sin mezclas) */
-        .canvas-container {
-            border: 2px dashed #444; background-color: #000;
-            display: flex; align-items: center; justify-content: center;
-            overflow: hidden; box-shadow: 0 0 20px rgba(0,0,0,0.5);
-        }
-        .canvas-1280 { width: 1280px; height: 720px; max-width: 100%; max-height: 80%; }
-        .canvas-568 { width: 568px; height: 284px; }
-        .preview-img { width: 100%; height: 100%; object-fit: contain; display: none; }
-        
-        .viewer-title { position: absolute; top: 20px; left: 20px; font-size: 14px; color: var(--text-muted); letter-spacing: 1px; text-transform: uppercase; }
-        .placeholder-text { color: #555; font-size: 14px; text-align: center; }
-    </style>
-</head>
-<body>
-
-    <!-- BARRA DE PESTAÑAS CORRECTA -->
-    <div class="tab-bar">
-        <button class="tab-btn active" onclick="switchTab('tab-editor')">EDITOR DE INTERFAZ</button>
-        <button class="tab-btn" onclick="switchTab('tab-juegos')">GESTOR DE JUEGOS .DAT</button>
-    </div>
-
-    <!-- PESTAÑA 1: EDITOR DE INTERFAZ -->
-    <div id="tab-editor" class="tab-content active">
-        <div class="sidebar">
-            <h3 style="color: var(--accent);">Operaciones CPD</h3>
-            <button class="btn btn-primary" onclick="triggerAction('LOAD_CPD')">CARGAR RESOURCE.CPD</button>
-            <div style="flex: 1;"></div>
-            <button class="btn" onclick="triggerAction('SAVE_CPD')">GUARDAR CONTENEDOR FINAL</button>
-        </div>
-        <div class="main-viewer">
-            <div class="viewer-title">Visor de Menú Principal (1280x720)</div>
-            <div class="canvas-container canvas-1280">
-                <img id="img-menu-view" class="preview-img" alt="Menu View">
-                <div class="placeholder-text" id="cpd-placeholder">Ningún contenedor resource.cpd cargado.<br>Dimensiones: 1280 x 720</div>
-            </div>
-        </div>
-    </div>
-
-    <!-- PESTAÑA 2: GESTOR DE JUEGOS (MULTIMEDIA INDEPENDIENTE RECUPERADO) -->
-    <div id="tab-juegos" class="tab-content">
-        <div class="sidebar">
-            <h3 style="color: var(--accent);">Estructura de Juegos</h3>
-            <button class="btn" onclick="triggerAction('LOAD_DAT_DIR')">CARGAR CARPETA DE JUEGOS</button>
-            <label style="font-size: 12px; color: var(--text-muted); margin-top: 10px;">Juegos Detectados (FILELIST.TXT):</label>
-            <div class="list-container" id="game-list">
-                <div class="placeholder-text" style="padding: 20px;">Carga la carpeta para listar los títulos.</div>
-            </div>
-        </div>
-        <div class="main-viewer">
-            <div class="viewer-title">Gestor Multimedia (.RAW - 568x284)</div>
-            <div class="canvas-container canvas-568" style="border-style: solid; border-color: var(--accent);">
-                <img id="img-game-view" class="preview-img" alt="Game View">
-                <div class="placeholder-text" id="game-placeholder">Ningún archivo multimedia seleccionado.<br>Dimensión Estricta: 568 x 284</div>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        function switchTab(tabId) {
-            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-            document.getElementById(tabId).classList.add('active');
-            event.target.classList.add('active');
-        }
-
-        // COMUNICACIÓN CLÁSICA: Usamos el cambio de título que tu versión semifuncional entiende perfectamente
-        function triggerAction(actionName) {
-            document.title = "ACTION:" + actionName;
-            // Pequeño reset para que PowerShell pueda capturar el mismo clic seguidamente si hace falta
-            setTimeout(() => { document.title = "Prometheus Suite D - Interfaz de Control"; }, 100);
-        }
-
-        // Al hacer clic en un juego, avisamos a PowerShell cambiando el título con el nombre del juego
-        function selectGame(gameName) {
-            document.title = "SELECT_GAME:" + gameName;
-            setTimeout(() => { document.title = "Prometheus Suite D - Interfaz de Control"; }, 100);
-        }
-
-        // FUNCIÓN QUE LLAMA POWERSHELL PARA RELLENAR LA LISTA (Mantiene tu lógica original)
-        function populateGameList(gamesArray) {
-            const listContainer = document.getElementById('game-list');
-            listContainer.innerHTML = '';
-            if (!gamesArray || gamesArray.length === 0) {
-                listContainer.innerHTML = '<div class="placeholder-text" style="padding:20px;">FILELIST.TXT vacío.</div>';
-                return;
+        for ($i = $len - 4; $i -ge $po; $i--) {
+            if ($bytes[$i] -eq 0x57 -and $bytes[$i+1] -eq 0x51 -and $bytes[$i+2] -eq 0x57 -and $bytes[$i+3] -eq 0x01) {
+                $bytes[$i] = 0x50; $bytes[$i+1] = 0x4b; $bytes[$i+2] = 0x05; $bytes[$i+3] = 0x06; break
             }
-            gamesArray.forEach(game => {
-                const item = document.createElement('div');
-                item.className = 'game-item';
-                item.innerText = game;
-                item.onclick = function() {
-                    document.querySelectorAll('.game-item').forEach(el => el.classList.remove('selected'));
-                    item.classList.add('selected');
-                    selectGame(game);
-                };
-                listContainer.appendChild(item);
-            });
         }
 
-        // ==============================================================================
-        // --- SEPARACIÓN ABSOLUTA DE CANALES DE IMAGEN (EL FIN DEL BUG) ---
-        // ==============================================================================
+        $tempZip = [System.IO.Path]::GetTempFileName()
+        [System.IO.File]::WriteAllBytes($tempZip, $bytes)
+        $archive = [System.IO.Compression.ZipFile]::OpenRead($tempZip)
         
-        // Canal Exclusivo 1: Solo pinta en el Visor Grande (1280x720)
-        window.loadMenuRaw = function(base64Data) {
-            const img = document.getElementById('img-menu-view');
-            const placeholder = document.getElementById('cpd-placeholder');
-            if(placeholder) placeholder.style.display = 'none';
-            img.src = "data:image/png;base64," + base64Data;
-            img.style.display = 'block';
-        };
+        $listBoxCpd.Items.Clear()
+        $global:VirtualFiles.Clear()
 
-        // Canal Exclusivo 2: Solo pinta en el Visor Pequeño (568x284) del Gestor Multimedia
-        window.loadGameRaw = function(base64Data) {
-            const img = document.getElementById('img-game-view');
-            const placeholder = document.getElementById('game-placeholder');
-            if(placeholder) placeholder.style.display = 'none';
-            img.src = "data:image/png;base64," + base64Data;
-            img.style.display = 'block';
-        };
-    </script>
-</body>
-</html>
+        foreach ($entry in $archive.Entries) {
+            if (-not [string]::IsNullOrEmpty($entry.Name)) {
+                $entryStream = $entry.Open()
+                $ms = New-Object System.IO.MemoryStream
+                $entryStream.CopyTo($ms)
+                $global:VirtualFiles[$entry.Name.ToLower()] = $ms.ToArray()
+                $listBoxCpd.Items.Add($entry.Name)
+                $entryStream.Close(); $ms.Close()
+            }
+        }
+        $archive.Dispose()
+        if (Test-Path $tempZip) { Remove-Item $tempZip -Force }
+    }
+})
+
+$listBoxCpd.Add_SelectedIndexChanged({
+    if ($listBoxCpd.SelectedItem -eq $null) { return }
+    if ($tabMenus.Controls.Contains($webBrowser) -eq $false) { $tabMenus.Controls.Add($webBrowser) }
+    
+    $selectedFileName = $listBoxCpd.SelectedItem.ToString()
+    $rawBytes = $global:VirtualFiles[$selectedFileName.ToLower()]
+    if ($rawBytes -eq $null) { return }
+    $base64String = [System.Convert]::ToBase64String($rawBytes)
+    $webBrowser.Document.InvokeScript("loadRawFromSuite", @($selectedFileName, $base64String)) | Out-Null
+})
+# =========================================================================
+# MAQUETACIÓN PESTAÑA 2: GESTOR DE JUEGOS Y LISTADOS (.DAT)
+# =========================================================================
+$panelDatLeft = New-Object System.Windows.Forms.Panel
+$panelDatLeft.Size = New-Object System.Drawing.Size(280, 1080)
+$panelDatLeft.Dock = [System.Windows.Forms.DockStyle]::Left
+$panelDatLeft.BackColor = [System.Drawing.Color]::FromArgb(45, 45, 48)
+
+$btnLoadDat = New-Object System.Windows.Forms.Button
+$btnLoadDat.Text = "CARGAR ARCHIVO .DAT"
+$btnLoadDat.Size = New-Object System.Drawing.Size(260, 45)
+$btnLoadDat.Location = New-Object System.Drawing.Point(10, 15)
+$btnLoadDat.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+$btnLoadDat.ForeColor = [System.Drawing.Color]::White
+$btnLoadDat.BackColor = [System.Drawing.Color]::FromArgb(230, 126, 34)
+$btnLoadDat.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+
+$btnSaveDat = New-Object System.Windows.Forms.Button
+$btnSaveDat.Text = "GUARDAR .DAT MODIFICADO"
+$btnSaveDat.Size = New-Object System.Drawing.Size(260, 45)
+$btnSaveDat.Location = New-Object System.Drawing.Point(10, 75)
+$btnSaveDat.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+$btnSaveDat.ForeColor = [System.Drawing.Color]::White
+$btnSaveDat.BackColor = [System.Drawing.Color]::FromArgb(211, 84, 0)
+$btnSaveDat.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+
+$listBoxDat = New-Object System.Windows.Forms.ListBox
+$listBoxDat.Location = New-Object System.Drawing.Point(10, 135)
+$listBoxDat.Size = New-Object System.Drawing.Size(260, 840)
+$listBoxDat.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30)
+$listBoxDat.ForeColor = [System.Drawing.Color]::LightGray
+$listBoxDat.Font = New-Object System.Drawing.Font("Consolas", 10)
+$listBoxDat.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
+
+$panelDatLeft.Controls.Add($btnLoadDat)
+$panelDatLeft.Controls.Add($btnSaveDat)
+$panelDatLeft.Controls.Add($listBoxDat)
+$tabJuegos.Controls.Add($panelDatLeft)
+
+$btnLoadDat.Add_Click({
+    $openDialog = New-Object System.Windows.Forms.OpenFileDialog
+    $openDialog.Filter = "Contenedor Juegos Game Stick (*.dat)|*.dat"
+    $openDialog.Title = "Selecciona ROOT.DAT o un emulador 000-014.dat"
+    
+    if ($openDialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+        $global:DatOriginalPath = $openDialog.FileName
+        $bytes = [System.IO.File]::ReadAllBytes($global:DatOriginalPath)
+        $len = $bytes.Length
+        $po = 0
+
+        while ($po + 30 -le $len) {
+            if ($bytes[$po] -eq 0x57 -and $bytes[$po+1] -eq 0x51 -and $bytes[$po+2] -eq 0x57 -and $bytes[$po+3] -eq 0x03) {
+                $bytes[$po] = 0x50; $bytes[$po+1] = 0x4b; $bytes[$po+2] = 0x03; $bytes[$po+3] = 0x04
+                $compSz = [System.BitConverter]::ToUInt32($bytes, $po + 18)
+                $nameLen = [System.BitConverter]::ToUInt16($bytes, $po + 26)
+                $extraLen = [System.BitConverter]::ToUInt16($bytes, $po + 28)
+                $po += 30
+                if ($po + $nameLen -le $len) { for ($pi = 0; $pi -lt $nameLen; $pi++) { $bytes[$po] = $bytes[$po] -bxor 0xe5; $po++ } }
+                $po += $extraLen + $compSz
+            } else { break }
+        }
+        while ($po + 46 -le $len) {
+            if ($bytes[$po] -eq 0x57 -and $bytes[$po+1] -eq 0x51 -and $bytes[$po+2] -eq 0x57 -and $bytes[$po+3] -eq 0x02) {
+                $bytes[$po] = 0x50; $bytes[$po+1] = 0x4b; $bytes[$po+2] = 0x01; $bytes[$po+3] = 0x02
+                $nameLen = [System.BitConverter]::ToUInt16($bytes, $po + 28)
+                $extraLen = [System.BitConverter]::ToUInt16($bytes, $po + 30)
+                $po += 46
+                if ($po + $nameLen -le $len) { for ($pi = 0; $pi -lt $nameLen; $pi++) { $bytes[$po] = $bytes[$po] -bxor 0xe5; $po++ } }
+                $po += $extraLen
+            } else { break }
+        }
+        for ($i = $len - 4; $i -ge $po; $i--) {
+            if ($bytes[$i] -eq 0x57 -and $bytes[$i+1] -eq 0x51 -and $bytes[$i+2] -eq 0x57 -and $bytes[$i+3] -eq 0x01) {
+                $bytes[$i] = 0x50; $bytes[$i+1] = 0x4b; $bytes[$i+2] = 0x05; $bytes[$i+3] = 0x06; break
+            }
+        }
+
+        $tempZip = [System.IO.Path]::GetTempFileName()
+        [System.IO.File]::WriteAllBytes($tempZip, $bytes)
+        $archive = [System.IO.Compression.ZipFile]::OpenRead($tempZip)
+        
+        $listBoxDat.Items.Clear()
+        $global:VirtualDatFiles.Clear()
+
+        foreach ($entry in $archive.Entries) {
+            if (-not [string]::IsNullOrEmpty($entry.Name)) {
+                $entryStream = $entry.Open()
+                $ms = New-Object System.IO.MemoryStream
+                $entryStream.CopyTo($ms)
+                $global:VirtualDatFiles[$entry.Name.ToLower()] = $ms.ToArray()
+                $listBoxDat.Items.Add($entry.Name)
+                $entryStream.Close(); $ms.Close()
+            }
+        }
+        $archive.Dispose()
+        if (Test-Path $tempZip) { Remove-Item $tempZip -Force }
+    }
+})
+
+$listBoxDat.Add_SelectedIndexChanged({
+    if ($listBoxDat.SelectedItem -eq $null) { return }
+    if ($tabJuegos.Controls.Contains($webBrowser) -eq $false) { $tabJuegos.Controls.Add($webBrowser) }
+    
+    $selectedFileName = $listBoxDat.SelectedItem.ToString()
+    $rawBytes = $global:VirtualDatFiles[$selectedFileName.ToLower()]
+    if ($rawBytes -eq $null) { return }
+    $base64String = [System.Convert]::ToBase64String($rawBytes)
+    $webBrowser.Document.InvokeScript("loadRawFromSuite", @($selectedFileName, $base64String)) | Out-Null
+})
+# --- INTERCEPTOR DUAL CON CANDADO ANTI-REPETICION ---
+$global:LastSavedFile = ""
+$global:LastSavedTime = [DateTime]::MinValue
+
+$webBrowser.Add_DocumentTitleChanged({
+    $title = $webBrowser.DocumentTitle
+    if ($title -and $title.StartsWith("SAVERAW:")) {
+        $payload = $title.Substring(8)
+        $separatorIdx = $payload.IndexOf("|")
+        if ($separatorIdx -gt 0) {
+            $fileName = $payload.Substring(0, $separatorIdx)
+            $base64Data = $payload.Substring($separatorIdx + 1)
+            
+            $now = [DateTime]::Now
+            $timeDiff = ($now - $global:LastSavedTime).TotalSeconds
+            if ($fileName -eq $global:LastSavedFile -and $timeDiff -lt 1.5) { return }
+            
+            $global:LastSavedFile = $fileName
+            $global:LastSavedTime = $now
+            $binData = [System.Convert]::FromBase64String($base64Data)
+
+            if ($tabControl.SelectedIndex -eq 0) {
+                $global:VirtualFiles[$fileName.ToLower()] = $binData
+            } else {
+                $global:VirtualDatFiles[$fileName.ToLower()] = $binData
+            }
+            [System.Windows.Forms.MessageBox]::Show("Cambios aplicados temporalmente en memoria para: $fileName`n`nNo olvides pulsar el boton Guardar del panel izquierdo al terminar.", "Exito Prometheus", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
+        }
+        $webBrowser.Document.Title = "Suite Motor Grafico Game Stick Lite"
+    }
+})
+
+# --- RE-EMPAQUETADOR BINARIO EXCLUSIVO PARA ARCHIVOS .DAT ---
+$btnSaveDat.Add_Click({
+    if ($global:DatOriginalPath -eq "" -or $global:VirtualDatFiles.Count -eq 0) {
+        [System.Windows.Forms.MessageBox]::Show("Primero debes cargar un archivo .dat.", "Error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Warning)
+        return
+    }
+    try {
+        $backupPath = $global:DatOriginalPath + ".backup"
+        if (-not (Test-Path $backupPath)) { [System.IO.File]::Copy($global:DatOriginalPath, $backupPath, $true) }
+
+        $tempZip = [System.IO.Path]::GetTempFileName()
+        $stream = [System.IO.File]::Open($tempZip, [System.IO.FileMode]::OpenOrCreate)
+        $archive = New-Object System.IO.Compression.ZipArchive($stream, [System.IO.Compression.ZipArchiveMode]::Create)
+
+        foreach ($key in $global:VirtualDatFiles.Keys) {
+            $origName = ""
+            foreach ($item in $listBoxDat.Items) { if ($item.ToLower() -eq $key) { $origName = $item; break } }
+            if ($origName -eq "") { $origName = $key }
+            $entry = $archive.CreateEntry($origName, [System.IO.Compression.CompressionLevel]::Optimal)
+            $entryStream = $entry.Open()
+            $fileBytes = $global:VirtualDatFiles[$key]
+            $entryStream.Write($fileBytes, 0, $fileBytes.Length)
+            $entryStream.Close()
+        }
+        $archive.Dispose(); $stream.Close()
+
+        $bytes = [System.IO.File]::ReadAllBytes($tempZip)
+        $len = $bytes.Length
+        if (Test-Path $tempZip) { Remove-Item $tempZip -Force }
+
+        $po = 0
+        while ($po + 30 -le $len) {
+            if ($bytes[$po] -eq 0x50 -and $bytes[$po+1] -eq 0x4b -and $bytes[$po+2] -eq 0x03 -and $bytes[$po+3] -eq 0x04) {
+                $bytes[$po] = 0x57; $bytes[$po+1] = 0x51; $bytes[$po+2] = 0x57; $bytes[$po+3] = 0x03
+                $compSz = [System.BitConverter]::ToUInt32($bytes, $po + 18)
+                $nameLen = [System.BitConverter]::ToUInt16($bytes, $po + 26)
+                $extraLen = [System.BitConverter]::ToUInt16($bytes, $po + 28)
+                $po += 30
+                if ($po + $nameLen -le $len) { for ($pi = 0; $pi -lt $nameLen; $pi++) { $bytes[$po] = $bytes[$po] -bxor 0xe5; $po++ } }
+                $po += $extraLen + $compSz
+            } else { break }
+        }
+        while ($po + 46 -le $len) {
+            if ($bytes[$po] -eq 0x50 -and $bytes[$po+1] -eq 0x4b -and $bytes[$po+2] -eq 0x01 -and $bytes[$po+3] -eq 0x02) {
+                $bytes[$po] = 0x57; $bytes[$po+1] = 0x51; $bytes[$po+2] = 0x57; $bytes[$po+3] = 0x02
+                $nameLen = [System.BitConverter]::ToUInt16($bytes, $po + 28)
+                $extraLen = [System.BitConverter]::ToUInt16($bytes, $po + 30)
+                $po += 46
+                if ($po + $nameLen -le $len) { for ($pi = 0; $pi -lt $nameLen; $pi++) { $bytes[$po] = $bytes[$po] -bxor 0xe5; $po++ } }
+                $po += $extraLen
+            } else { break }
+        }
+        for ($i = $len - 4; $i -ge $po; $i--) {
+            if ($bytes[$i] -eq 0x50 -and $bytes[$i+1] -eq 0x4b -and $bytes[$i+2] -eq 0x05 -and $bytes[$i+3] -eq 0x06) {
+                $bytes[$i] = 0x57; $bytes[$i+1] = 0x51; $bytes[$i+2] = 0x57; $bytes[$i+3] = 0x01; break
+            }
+        }
+        [System.IO.File]::WriteAllBytes($global:DatOriginalPath, $bytes)
+        [System.Windows.Forms.MessageBox]::Show("Contenedor de juegos .DAT reconstruido con exito. Copia guardada en .backup", "Operacion Completada", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
+    } catch {
+        [System.Windows.Forms.MessageBox]::Show("Error critico en DAT: $_", "Error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
+    }
+})
+
+# =========================================================================
+# ARRANQUE GENERAL DE PROMETHEUS
+# =========================================================================
+$tabMenus.Controls.Add($webBrowser)
+$form.Controls.Add($tabControl)
+
+if (Test-Path $htmlPath) { $webBrowser.Navigate($htmlPath) } 
+else { [System.Windows.Forms.MessageBox]::Show("No se encontro el archivo motor.html", "Error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error) }
+
+$form.ShowDialog() | Out-Null
