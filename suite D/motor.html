@@ -105,10 +105,9 @@
 				<button class="btn btn-purple" onclick="artAction('change')">🔄 Cambiar Imagen</button>
 				<button class="btn btn-danger" onclick="artAction('delete')">🗑️ Borrar Imagen</button>
 				
-				<!-- 🌟 EL VISOR SEPARADO: Cuadro de 584x268 para pintar la carátula de forma estanca -->
-				<div style="width: 584px; height: 268px; display: flex; align-items: center; justify-content: center; background-color: #111; border: 1px dashed #444455; margin: 15px auto 0 auto; overflow: hidden; border-radius: 4px;">
-					<canvas id="visorCaratulaCanvas" width="568" height="284" style="width: 100%; height: auto; display: block; border: 1px solid #444; border-radius: 4px; background-color: #000;"></canvas>
-				</div>
+				<!-- 🌟 EL VISOR QUE FALTABA: Cuadro de 584x268 para pintar la carátula -->
+				<div style="width: 584px; height: 268px; display: flex; align-items: center; justify-content: center; background-color: #111; border: 1px dashed #44ium; margin: 15px auto 0 auto; overflow: hidden; border-radius: 4px;">
+			        <canvas id="visorCaratulaCanvas" width="568" height="284" style="width: 100%; height: auto; display: block; border: 1px solid #444; border-radius: 4px; background-color: #000;"></canvas>
 			</div>
 		</div>
 	</div>
@@ -116,7 +115,7 @@
 <script type="text/javascript">
 function byId(id) { return document.getElementById(id); }
 (function(gobj) {
-var g2D, gVisorCaratula2D, gFileName = "", gDataView, gRaws = [], gIndex = 0;
+var g2D, gFileName = "", gDataView, gRaws = [], gIndex = 0;
 var gWidth = 1280, gHeight = 720;
 var isDragging = false, isResizing = false;
 var dragStartX, dragStartY;
@@ -180,7 +179,6 @@ gobj.loadRawFromSuite = function(fileName, base64Data) {
 	gFileName = fileName;
 	byId('currentFileName').textContent = "Archivo: " + fileName;
 	g2D = byId('2d').getContext('2d');
-	gVisorCaratula2D = byId('visorCaratulaCanvas').getContext('2d');
 	
 	var lowerName = fileName.toLowerCase();
 	
@@ -378,6 +376,7 @@ function selectGameRow(idx) {
 			}
 		}
 	}
+	
 	// ==========================================
 	// EJECUCIÓN Y COMUNICACIÓN CON POWERSHELL
 	// ==========================================
@@ -400,6 +399,7 @@ function selectGameRow(idx) {
 	document.title = "SELECT_GAME:" + idx + "|" + targetArtFile;
 }
 
+
 gobj.artAction = function(actionType) {
 	if (gSelectedRowIndex === -1) {
 		alert("Mákina, primero debes seleccionar una fila haciendo clic en la lista.");
@@ -415,7 +415,7 @@ gobj.artAction = function(actionType) {
 		var fileInput = document.createElement("input");
 		fileInput.type = "file"; fileInput.accept = "image/*";
 		fileInput.onchange = function(e) {
-			var file = e.target.files[0]; if (!file) return;
+			var file = e.target.files; if (!file) return;
 			var reader = new FileReader();
 			reader.onload = function(evt) {
 				document.title = "ART_UPDATE:" + gSelectedRowIndex + "|" + gameName + "|" + evt.target.result;
@@ -475,30 +475,23 @@ function renderImageBytes(index) {
 			u8c[ofsRGBA++] = (c >> 11 & 31) * 255 / 31; u8c[ofsRGBA++] = (c >> 5 & 63) * 255 / 63;
 			u8c[ofsRGBA++] = (c & 31) * 255 / 31; u8c[ofsRGBA++] = 255;
 		}
-	}
-	
-	// Pintamos exclusivamente sobre el lienzo principal del editor de interfaz
+		}
 	g2D.putImageData(imageData, raw.xLeft, raw.yTop);
 
-	// 🌟 VISOR ESTANCO SEPARADO: Espejo automático adaptado al Canvas derecho sin alterar el buffer
+	// 🌟 MÁKINA: Espejo automático al visor interactivo derecho
 	try {
-		if (gVisorCaratula2D) {
-			gVisorCaratula2D.clearRect(0, 0, 568, 284);
-			
-			// Creamos un canvas temporal volatil para poder estirar la imagen con drawImage()
-			var tempCanvas = document.createElement('canvas');
-			tempCanvas.width = w; tempCanvas.height = h;
-			var tempCtx = tempCanvas.getContext('2d');
-			tempCtx.putImageData(imageData, 0, 0);
-			
-			// Escalamos limpiamente al visor secundario respetando sus dimensiones de 568x284
-			gVisorCaratula2D.drawImage(tempCanvas, 0, 0, w, h, 0, 0, 568, 284);
+		var destCanvas = document.getElementById('visorCaratulaCanvas');
+		if (destCanvas) {
+			var destCtx = destCanvas.getContext('2d');
+			// Limpiamos el visor por si la imagen anterior era de otro tamaño
+			destCtx.clearRect(0, 0, destCanvas.width, destCanvas.height);
+			// Dibujamos la imagen recién pintada adaptándola al tamaño del visor (568x284)
+			destCtx.drawImage(canvasEl, raw.xLeft, raw.yTop, w, h, 0, 0, destCanvas.width, destCanvas.height);
 		}
 	} catch(err) {
 		console.log("Error en el visor derecho: " + err.message);
 	}
 }
-
 gobj.rawReplace = function(inputEl) {
 	if (gIsTextMode || !inputEl || !inputEl.files || inputEl.files.length === 0 || !gDataView) return;
 	gobj.saveHistoryState();
@@ -521,6 +514,7 @@ gobj.rawReplace = function(inputEl) {
 gobj.rawDownload = function() {
 	// EXPORTADOR REMASTERIZADO PARA TABLA REJILLA (.TXT / .CFG)
 	if (gIsTextMode) {
+		// Unimos el array dinámico de las celdas usando saltos de línea limpios
 		var textContent = gTextLines.join("\r\n");
 		var base64Result = window.btoa(unescape(encodeURIComponent(textContent)));
 		
@@ -580,24 +574,78 @@ gobj.rawDownload = function() {
 		}
 	}
 	
-	// 🛠️ MÁKINA: Cierre del conversor y exportación del String binario final hacia PowerShell
-	var u8array = new Uint8Array(outputBuffer); 
-	var bString = "";
-	for (var k = 0; k < u8array.length; k++) {
-		bString += String.fromCharCode(u8array[k]);
-	}
-	var base64Final = window.btoa(bString);
+	var u8array = new Uint8Array(outputBuffer); var bString = "";
+	for (var i = 0; i < u8array.length; i++) { bString += String.fromCharCode(u8array[i]); }
+	var base64Result = window.btoa(bString);
 	
 	if (window.external && window.external.SaveRawData) {
-		window.external.SaveRawData(gFileName, base64Final);
+		window.external.SaveRawData(gFileName, base64Result);
 	} else {
-		document.title = "SAVERAW:" + gFileName + "|" + base64Final;
+		document.title = "SAVERAW:" + gFileName + "|" + base64Result;
 	}
 };
 
-// Registro de eventos del mouse del lienzo principal e inyección del módulo final
-window.SuitePrometheus = gobj;
-})(window.SuitePrometheus || {});
+var canvasEl = byId('2d');
+canvasEl.onmousedown = function(e) {
+	if (gIsTextMode || !gDataView || gRaws.length === 0) return;
+	var rect = canvasEl.getBoundingClientRect();
+	var mouseX = e.clientX - rect.left, mouseY = e.clientY - rect.top, raw = gRaws[gIndex]; if (!raw) return;
+	if (Math.abs(mouseX - raw.xRight) <= handleSize && Math.abs(mouseY - raw.yBottom) <= handleSize) {
+		gobj.saveHistoryState(); isResizing = true; dragStartX = mouseX; dragStartY = mouseY; initialXRight = raw.xRight; initialYBottom = raw.yBottom; return;
+	}
+	if (mouseX >= raw.xLeft && mouseX <= raw.xRight && mouseY >= raw.yTop && mouseY <= raw.yBottom) {
+		gobj.saveHistoryState(); isDragging = true; dragStartX = mouseX; dragStartY = mouseY;
+		initialXLeft = raw.xLeft; initialYTop = raw.yTop; initialXRight = raw.xRight; initialYBottom = raw.yBottom;
+	}
+};
+
+window.onmousemove = function(e) {
+	if (gIsTextMode || (!isDragging && !isResizing)) return;
+	var rect = canvasEl.getBoundingClientRect(), mouseX = e.clientX - rect.left, mouseY = e.clientY - rect.top, raw = gRaws[gIndex]; if (!raw) return;
+	var dx = mouseX - dragStartX, dy = mouseY - dragStartY;
+	if (isDragging) {
+		raw.xLeft = initialXLeft + dx; raw.yTop = initialYTop + dy; raw.xRight = initialXRight + dx; raw.yBottom = initialYBottom + dy;
+	} else if (isResizing) {
+		raw.xRight = initialXRight + dx; raw.yBottom = initialYBottom + dy;
+		if (lastLoadedImgElement) {
+			var w = raw.xRight - raw.xLeft, h = raw.yBottom - raw.yTop;
+			if (w > 0 && h > 0) {
+				var tc = document.createElement('canvas'); tc.width = w; tc.height = h;
+				var tx = tc.getContext('2d'); tx.drawImage(lastLoadedImgElement, 0, 0, w, h);
+				raw.pixelData = tx.getImageData(0, 0, w, h).data;
+			}
+		}
+	}
+	gobj.rawUpdateLayout(false); renderAll();
+};
+
+window.onmouseup = function() { if (isDragging || isResizing) { isDragging = false; isResizing = false; } };
+
+window.loadRawFromSuite = gobj.loadRawFromSuite; window.rawUpdateLayout = gobj.rawUpdateLayout;
+window.rawReplace = gobj.rawReplace; window.rawDownload = gobj.rawDownload; window.rawUndo = gobj.rawUndo;
+window.rawToggleRotation = gobj.rawToggleRotation; window.rawIndexChange = gobj.rawIndexChange;
+
+})(window.RawEditor = window.RawEditor || {});
+// 🚀 FUNCIÓN PARA CONTROLAR LOS BOTONES DE GESTIÓN MULTIMEDIA
+function artAction(accion) {
+    console.log("Acción multimedia solicitada: " + accion);
+    
+    // Evaluamos qué botón ha pulsado el usuario
+    switch(accion) {
+        case 'añadir':
+            // Aquí irá tu lógica para buscar o añadir carátula
+            break;
+        case 'borrar':
+            // Aquí la lógica para eliminar
+            break;
+        case 'exportar':
+            // Aquí la lógica para extraer el raw
+            break;
+        default:
+            break;
+    }
+}
+
 </script>
 </body>
 </html>
