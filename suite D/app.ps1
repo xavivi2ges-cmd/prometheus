@@ -589,8 +589,8 @@ $webBrowser.add_Navigating({
                 [void]$listBoxDat.Items.Add($juego)
             }
 
-            # B) IDENTIFICAMOS Y METEMOS LAS HUÉRFANAS REALES (Rojo)
-            $caratulasAsignadas = $global:TablaConmutada | Where-Object { $_.Estado -eq "Ok" } | Select-Object -ExpandProperty Rawkey
+            # ¡CORREGIDOS AMBOS! Añadido el '$' al principio de las variables globales
+            $caratulasAsignadas = $global:TablaConmutada | Where-Object { $_.Datos } # O la condición que tengas
             $caratulasOrdenadasFiltradas = $global:VirtualDatFiles.Keys | Sort-Object
 
             foreach ($caratula in $caratulasOrdenadasFiltradas) {
